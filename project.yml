@@ -50,3 +50,17 @@ targets:
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../../../../../Frameworks"
     frameworks:
       - sdk: FinderSync.framework
+
+  RMenuTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: RMenuTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.yeshan333.RMenuTests
+        GENERATE_INFOPLIST_FILE: YES
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/RMenu.app/Contents/MacOS/RMenu"
+    dependencies:
+      - target: RMenu

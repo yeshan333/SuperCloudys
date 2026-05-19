@@ -2,6 +2,8 @@ import SwiftUI
 
 struct MenuBarView: View {
     @StateObject private var extensionStatus = ExtensionStatus()
+    @EnvironmentObject private var dockMonitor: DockMonitor
+    @EnvironmentObject private var loginItem: LoginItemManager
     @State private var customApps: [CustomApp] = CustomAppStore.load()
 
     var body: some View {
@@ -17,6 +19,10 @@ struct MenuBarView: View {
         } else {
             Label("Finder 扩展未启用", systemImage: "xmark.circle")
         }
+
+        Divider()
+
+        DockAppsSection(monitor: dockMonitor)
 
         Divider()
 
@@ -39,12 +45,21 @@ struct MenuBarView: View {
 
         Divider()
 
+        Toggle("开机自启", isOn: Binding(
+            get: { loginItem.isEnabled },
+            set: { loginItem.setEnabled($0) }
+        ))
+
+        Divider()
+
         Button("打开系统设置…") {
             extensionStatus.openSystemSettings()
         }
         Button("刷新状态") {
             extensionStatus.checkStatus()
             customApps = CustomAppStore.load()
+            dockMonitor.refresh(forceRegister: true)
+            loginItem.refresh()
         }
 
         Divider()
