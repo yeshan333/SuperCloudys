@@ -23,6 +23,7 @@ macOS 桌面增效工具:**Finder 右键菜单增强** + **Dock 全局快捷键*
   - 再按一次已在前台的应用 → 隐藏
 - **自动跟随 Dock 变化** - 后台每 5 秒轮询 Dock 配置,自动重新绑定
 - **全局开关** - 菜单栏一键禁用/启用所有快捷键
+- **辅助功能授权(推荐)** - 授予后通过 `AXUIElement` 激活目标 App,绕过 macOS 14+ 焦点保护;未授权自动 fallback 到 `NSRunningApplication.activate()`
 
 ### 其他
 
@@ -137,8 +138,9 @@ rm -f /tmp/rmenu-key.pem /tmp/rmenu-cert.pem /tmp/rmenu-cert.p12
 - 按 **Cmd+N** 激活第 N 个应用(N 在前台时改为隐藏,实现 toggle)
 - Dock 顺序变化后 5 秒内自动重新绑定
 - 在菜单栏关闭"启用 Cmd+1~0 快捷键"Toggle 可整体禁用
+- 首次启动会弹窗请求 **辅助功能** 权限。在 **系统设置 > 隐私与安全性 > 辅助功能** 勾选 RMenu 后,激活会通过 `AXUIElement` 直接 setFrontmost,**避免目标 App 弹出后被 macOS 14+ 焦点保护反弹**。不授权也能用,只是某些场景下目标 App 会被原前台 App 抢回焦点
 
-> ⚠️ Cmd+数字 是全局快捷键,会"抢走"其他 App 内的同款快捷键(如浏览器切换标签页)。冲突时在菜单栏关闭即可。
+> ⚠️ Cmd+数字 是全局快捷键,会"抢走"其他 App 内的同款快捷键(如浏览器切换标签页)。如果按了 Cmd+N 目标 App 弹出后立刻被反弹,通常是 **另一个工具(如 Magnet、Rectangle 等)注册了相同热键** —— 在菜单栏关闭或退出冲突的工具即可。
 
 ## 性能调优经验
 
@@ -195,7 +197,8 @@ r-menu/
 │   │   ├── DockReader.swift          # 解析 Dock plist
 │   │   ├── DockAppLauncher.swift     # launch/hide toggle
 │   │   ├── DockShortcutManager.swift # Carbon 全局快捷键注册
-│   │   └── DockMonitor.swift         # 后台轮询 + 状态
+│   │   ├── DockMonitor.swift         # 后台轮询 + 状态
+│   │   └── AccessibilityActivator.swift # AXUIElement 激活(绕焦点保护)
 │   ├── MenuBar/
 │   │   └── DockAppsSection.swift     # 菜单栏 Dock 子区
 │   ├── Services/
@@ -242,8 +245,8 @@ git push origin v1.0.0
 ## 技术实现
 
 - **Finder Sync Extension** (`FIFinderSync`) 注入右键菜单项;`MenuSnapshot` 模式在后台 utility queue 预构建菜单数据(apps + icons + mtime),主线程 `menu(for:)` 仅做 NSMenu 组装,稳态 < 0.5ms
-- **Carbon `RegisterEventHotKey`** 注册 Cmd+1~0 全局快捷键,不需要 Accessibility 权限
-- **`NSRunningApplication.activate()` / `.hide()`** 实现 launch/hide toggle,避免 AppleScript / Automation 权限
+- **Carbon `RegisterEventHotKey`** 注册 Cmd+1~0 全局快捷键(注册本身不需要 Accessibility 权限)
+- **激活策略双路径**:授权 Accessibility 后用 `AXUIElement` setFrontmost(绕 macOS 14+ 焦点保护),否则 fallback 到 `NSRunningApplication.activate()`;`.hide()` 隐藏,全程避免 AppleScript / Automation 权限
 - **`CFPreferences` / 直接读 plist** 解析 Dock 配置,沙盒下通过 `com.apple.security.temporary-exception.files.absolute-path.read-write` 入境
 - **`SMAppService.mainApp`** 实现开机自启(macOS 13+)
 - **SwiftUI `MenuBarExtra`** 实现菜单栏管理界面
