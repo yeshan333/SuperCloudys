@@ -88,9 +88,9 @@ final class DockShortcutManager {
                 .fromOpaque(userData)
                 .takeUnretainedValue()
             if let bundleID = manager.handlers[hotKeyID.id] {
-                DispatchQueue.main.async {
-                    DockAppLauncher.toggle(bundleID: bundleID)
-                }
+                // Run synchronously so the Carbon-granted activation token
+                // doesn't expire before we call activate().
+                DockAppLauncher.toggle(bundleID: bundleID)
             }
             return noErr
         }

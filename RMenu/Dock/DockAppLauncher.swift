@@ -21,7 +21,11 @@ enum DockAppLauncher {
         if let running = NSRunningApplication.runningApplications(
             withBundleIdentifier: bundleID
         ).first {
-            running.unhide()
+            if running.isHidden { running.unhide() }
+            // AX bypasses macOS 14+ focus-stealing when granted; falls back otherwise.
+            if AccessibilityActivator.activate(pid: running.processIdentifier) {
+                return
+            }
             if #available(macOS 14.0, *) {
                 running.activate()
             } else {
@@ -33,7 +37,6 @@ enum DockAppLauncher {
         guard let appURL = NSWorkspace.shared.urlForApplication(
             withBundleIdentifier: bundleID
         ) else { return }
-
         let config = NSWorkspace.OpenConfiguration()
         config.activates = true
         NSWorkspace.shared.openApplication(
