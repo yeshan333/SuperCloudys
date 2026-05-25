@@ -19,8 +19,9 @@ macOS 桌面增效工具:**Finder 右键菜单增强** + **Dock 全局快捷键*
 ### Dock 全局快捷键
 
 - **Cmd+1 ~ Cmd+9 / Cmd+0** - 一键激活/隐藏 Dock 中的前 10 个应用
-  - 按一次未在前台的应用 → 启动或聚焦
-  - 再按一次已在前台的应用 → 隐藏
+  - 应用未运行 → **冷启动**(直接用 Dock plist 里的路径,不依赖 LaunchServices 查询,沙盒下也稳)
+  - 应用在后台 → 聚焦到前台
+  - 应用在前台 → 隐藏(toggle)
 - **自动跟随 Dock 变化** - 后台每 5 秒轮询 Dock 配置,自动重新绑定
 - **全局开关** - 菜单栏一键禁用/启用所有快捷键
 - **辅助功能授权(推荐)** - 授予后通过 `AXUIElement` 激活目标 App,绕过 macOS 14+ 焦点保护;未授权自动 fallback 到 `NSRunningApplication.activate()`
@@ -50,56 +51,39 @@ macOS 桌面增效工具:**Finder 右键菜单增强** + **Dock 全局快捷键*
 
 ```bash
 brew install xcodegen
+xcodegen generate
 ```
 
-**构建与安装:**
+**推荐:一键脚本(签名稳定,TCC 权限不丢)**
 
 ```bash
-# 1. 生成 Xcode 项目
-xcodegen generate
+./scripts/install-local.sh
+```
 
-# 2. 构建(需要先创建自签名证书,见下方说明)
+脚本一次完成:**确保自签证书** → **Release 构建** → **替换 `~/Applications/RMenu.app`** → **重启**。
+
+- 首次运行会创建一个 10 年期的本地证书 `RMenu Local Dev` 导入登录钥匙串(只导一次)
+- 因为签名身份固定,**辅助功能等 TCC 授权在每次重新 build 后都会保留**(adhoc 签名每次都会让 TCC 失效,这就是为什么需要稳定证书)
+- 首次安装后仍需在 **系统设置 > 隐私与安全性 > 辅助功能** 添加一次 RMenu;之后所有迭代都不再需要
+
+**手动构建(适合 CI 风格):**
+
+```bash
 xcodebuild \
   -project RMenu.xcodeproj \
   -scheme RMenu \
-  -configuration Debug \
+  -configuration Release \
   build \
-  CODE_SIGN_IDENTITY="RMenu Development" \
+  CODE_SIGN_IDENTITY="RMenu Local Dev" \
   CODE_SIGNING_REQUIRED=YES \
   CODE_SIGNING_ALLOWED=YES \
   CONFIGURATION_BUILD_DIR="$(pwd)/build"
 
-# 3. 安装到 ~/Applications 并激活扩展
 cp -R build/RMenu.app ~/Applications/
 open ~/Applications/RMenu.app
-pluginkit -a ~/Applications/RMenu.app/Contents/PlugIns/RMenuExtension.appex
 pluginkit -e use -i com.yeshan333.RMenu.FinderSyncExtension
 killall Finder
 ```
-
-**创建自签名证书(首次构建前执行一次):**
-
-```bash
-# 生成证书
-openssl req -x509 -newkey rsa:2048 \
-  -keyout /tmp/rmenu-key.pem -out /tmp/rmenu-cert.pem \
-  -days 365 -nodes -subj "/CN=RMenu Development"
-
-# 打包为 p12
-openssl pkcs12 -export \
-  -out /tmp/rmenu-cert.p12 \
-  -inkey /tmp/rmenu-key.pem -in /tmp/rmenu-cert.pem \
-  -passout pass:rmenu
-
-# 导入钥匙串
-security import /tmp/rmenu-cert.p12 -P rmenu \
-  -T /usr/bin/codesign
-
-# 清理临时文件
-rm -f /tmp/rmenu-key.pem /tmp/rmenu-cert.pem /tmp/rmenu-cert.p12
-```
-
-导入后,需要在 **钥匙串访问** 中找到 "RMenu Development" 证书,双击 > 信任 > 代码签名设为"始终信任"。
 
 ## 启用 Finder 扩展
 
@@ -223,8 +207,10 @@ r-menu/
 │   ├── DockAppTests.swift
 │   └── DockReaderTests.swift
 ├── scripts/
+│   ├── install-local.sh              # 本地一键 build + 替换 + 重启(稳定签名)
 │   ├── create-dmg.sh                 # DMG 打包脚本
-│   └── diagnose_rightclick.sh        # 右键卡顿诊断
+│   ├── diagnose_rightclick.sh        # 右键卡顿诊断
+│   └── rmenu-icon.svg                # App 图标源文件(改色调后用 rsvg-convert 重新导出)
 └── .github/workflows/
     └── build.yml                     # CI: 自动构建 & 发布 DMG
 ```
@@ -238,8 +224,8 @@ r-menu/
 
 ```bash
 # 发布新版本
-git tag v1.1.0
-git push origin v1.1.0
+git tag v1.2.0
+git push origin v1.2.0
 ```
 
 ## 技术实现

@@ -8,7 +8,7 @@ struct MenuBarView: View {
 
     var body: some View {
         // Header
-        Text("\(AppConstants.appName) v1.1.0")
+        Text("\(AppConstants.appName) v1.2.0")
             .font(.headline)
 
         Divider()
