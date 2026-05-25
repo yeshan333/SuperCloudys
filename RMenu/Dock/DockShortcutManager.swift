@@ -10,7 +10,7 @@ final class DockShortcutManager {
 
     private let log = Logger(subsystem: "com.yeshan333.RMenu", category: "DockShortcut")
     private var hotKeyRefs: [EventHotKeyRef] = []
-    private var handlers: [UInt32: String] = [:]
+    private var handlers: [UInt32: (bundleID: String, appPath: String)] = [:]
     private var eventHandler: EventHandlerRef?
     private var nextID: UInt32 = 1
 
@@ -33,7 +33,7 @@ final class DockShortcutManager {
         unregisterAll()
         for (index, app) in apps.prefix(DockApp.maxShortcutApps).enumerated() {
             guard let keyCode = Self.keyCode(forIndex: index) else { continue }
-            register(keyCode: keyCode, bundleID: app.bundleID)
+            register(keyCode: keyCode, bundleID: app.bundleID, appPath: app.appPath)
         }
     }
 
@@ -46,7 +46,7 @@ final class DockShortcutManager {
 
     // MARK: - Private
 
-    private func register(keyCode: UInt32, bundleID: String) {
+    private func register(keyCode: UInt32, bundleID: String, appPath: String) {
         let hotKeyID = EventHotKeyID(signature: Self.signature, id: nextID)
         var ref: EventHotKeyRef?
         let status = RegisterEventHotKey(
@@ -62,7 +62,7 @@ final class DockShortcutManager {
             return
         }
         hotKeyRefs.append(ref)
-        handlers[nextID] = bundleID
+        handlers[nextID] = (bundleID, appPath)
         nextID += 1
     }
 
@@ -87,10 +87,10 @@ final class DockShortcutManager {
             let manager = Unmanaged<DockShortcutManager>
                 .fromOpaque(userData)
                 .takeUnretainedValue()
-            if let bundleID = manager.handlers[hotKeyID.id] {
+            if let entry = manager.handlers[hotKeyID.id] {
                 // Run synchronously so the Carbon-granted activation token
                 // doesn't expire before we call activate().
-                DockAppLauncher.toggle(bundleID: bundleID)
+                DockAppLauncher.toggle(bundleID: entry.bundleID, appPath: entry.appPath)
             }
             return noErr
         }

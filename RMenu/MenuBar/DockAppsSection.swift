@@ -47,6 +47,6 @@ struct DockAppsSection: View {
     }
 
     private func activate(_ app: DockApp) {
-        DockAppLauncher.toggle(bundleID: app.bundleID)
+        DockAppLauncher.toggle(bundleID: app.bundleID, appPath: app.appPath)
     }
 }
