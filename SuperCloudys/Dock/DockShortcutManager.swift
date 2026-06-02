@@ -8,7 +8,7 @@ final class DockShortcutManager {
 
     static let shared = DockShortcutManager()
 
-    private let log = Logger(subsystem: "com.yeshan333.RMenu", category: "DockShortcut")
+    private let log = Logger(subsystem: "com.yeshan333.SuperCloudys", category: "DockShortcut")
     private var hotKeyRefs: [EventHotKeyRef] = []
     private var handlers: [UInt32: (bundleID: String, appPath: String)] = [:]
     private var eventHandler: EventHandlerRef?

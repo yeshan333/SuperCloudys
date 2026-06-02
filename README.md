@@ -1,4 +1,4 @@
-# RMenu
+# SuperCloudys
 
 macOS 桌面增效工具:**Finder 右键菜单增强** + **Dock 全局快捷键** + **菜单栏管理**。
 
@@ -19,7 +19,7 @@ macOS 桌面增效工具:**Finder 右键菜单增强** + **Dock 全局快捷键*
 ### Dock 全局快捷键
 
 - **Cmd+1 ~ Cmd+9 / Cmd+0** - 一键激活/隐藏 Dock 中的前 10 个应用
-  - 应用未运行 → **冷启动**(直接用 Dock plist 里的路径,不依赖 LaunchServices 查询,沙盒下也稳)
+  - 应用未运行 → **冷启动**(直接用 Dock plist 里的路径,不依赖 LaunchServices 查询)
   - 应用在后台 → 聚焦到前台
   - 应用在前台且有多个窗口 → **依次轮换窗口**,全部轮换完后隐藏
   - 应用在前台且只有单窗口 → 隐藏(toggle)
@@ -29,7 +29,7 @@ macOS 桌面增效工具:**Finder 右键菜单增强** + **Dock 全局快捷键*
 
 ### 其他
 
-- **开机自启** - 菜单栏 Toggle 启用,基于 `SMAppService`(macOS 13+ API,无需 Login Items 权限对话框)
+- **开机自启** - 菜单栏 Toggle 启用,基于 `SMAppService`（macOS 13+ API,无需 Login Items 权限对话框）
 - **菜单栏管理** - Dock 应用列表、自定义打开应用、Finder 扩展启用状态一目了然
 
 ## 系统要求
@@ -42,9 +42,9 @@ macOS 桌面增效工具:**Finder 右键菜单增强** + **Dock 全局快捷键*
 ### 从 Release 下载
 
 1. 在 [Releases](../../releases) 页面下载最新 `.dmg` 文件
-2. 打开 DMG,将 `RMenu.app` 拖入 `Applications` 文件夹
-3. 启动 `RMenu.app`
-4. 在 **系统设置 > 登录项与扩展 > 添加的扩展** 中找到 RMenu,启用 Finder 扩展
+2. 打开 DMG,将 `SuperCloudys.app` 拖入 `Applications` 文件夹
+3. 启动 `SuperCloudys.app`
+4. 在 **系统设置 > 登录项与扩展 > 添加的扩展** 中找到 SuperCloudys,启用 Finder 扩展
 
 ### 从源码构建
 
@@ -61,28 +61,28 @@ xcodegen generate
 ./scripts/install-local.sh
 ```
 
-脚本一次完成:**确保自签证书** → **Release 构建** → **替换 `~/Applications/RMenu.app`** → **重启**。
+脚本一次完成:**确保自签证书** → **Release 构建** → **替换 `~/Applications/SuperCloudys.app`** → **重启**。
 
-- 首次运行会创建一个 10 年期的本地证书 `RMenu Local Dev` 导入登录钥匙串(只导一次)
+- 首次运行会创建一个 10 年期的本地证书 `SuperCloudys Local Dev` 导入登录钥匙串(只导一次)
 - 因为签名身份固定,**辅助功能等 TCC 授权在每次重新 build 后都会保留**(adhoc 签名每次都会让 TCC 失效,这就是为什么需要稳定证书)
-- 首次安装后仍需在 **系统设置 > 隐私与安全性 > 辅助功能** 添加一次 RMenu;之后所有迭代都不再需要
+- 首次安装后仍需在 **系统设置 > 隐私与安全性 > 辅助功能** 添加一次 SuperCloudys;之后所有迭代都不再需要
 
 **手动构建(适合 CI 风格):**
 
 ```bash
 xcodebuild \
-  -project RMenu.xcodeproj \
-  -scheme RMenu \
+  -project SuperCloudys.xcodeproj \
+  -scheme SuperCloudys \
   -configuration Release \
   build \
-  CODE_SIGN_IDENTITY="RMenu Local Dev" \
+  CODE_SIGN_IDENTITY="SuperCloudys Local Dev" \
   CODE_SIGNING_REQUIRED=YES \
   CODE_SIGNING_ALLOWED=YES \
   CONFIGURATION_BUILD_DIR="$(pwd)/build"
 
-cp -R build/RMenu.app ~/Applications/
-open ~/Applications/RMenu.app
-pluginkit -e use -i com.yeshan333.RMenu.FinderSyncExtension
+cp -R build/SuperCloudys.app ~/Applications/
+open ~/Applications/SuperCloudys.app
+pluginkit -e use -i com.yeshan333.SuperCloudys.FinderSyncExtension
 killall Finder
 ```
 
@@ -92,15 +92,15 @@ killall Finder
 
 1. 打开 **系统设置**
 2. 进入 **登录项与扩展** > **添加的扩展**
-3. 找到 **RMenu**,开启 Finder 扩展开关
+3. 找到 **SuperCloudys**,开启 Finder 扩展开关
 
-启用后在 Finder 中右键即可看到 RMenu 菜单项。
+启用后在 Finder 中右键即可看到 SuperCloudys 菜单项。
 
 ## 使用
 
 ### 菜单栏
 
-启动后 RMenu 以菜单栏图标形式运行,点击可以:
+启动后 SuperCloudys 以菜单栏图标形式运行,点击可以:
 
 - 查看 Finder 扩展启用状态(自动检测,无需手动刷新)
 - **查看 Dock 应用列表 + 对应的 Cmd 快捷键标记**
@@ -118,18 +118,18 @@ killall Finder
 
 ### Dock 快捷键
 
-启动 RMenu 后,Cmd+1 ~ Cmd+9、Cmd+0 自动映射到 Dock 中的前 10 个应用:
+启动 SuperCloudys 后,Cmd+1 ~ Cmd+9、Cmd+0 自动映射到 Dock 中的前 10 个应用:
 
 - 按 **Cmd+N** 激活第 N 个应用;应用已在前台时,先依次轮换窗口(多窗口),全部轮换完后隐藏
 - Dock 顺序变化后 5 秒内自动重新绑定
 - 在菜单栏关闭"启用 Cmd+1~0 快捷键"Toggle 可整体禁用
-- 首次启动会弹窗请求 **辅助功能** 权限。在 **系统设置 > 隐私与安全性 > 辅助功能** 勾选 RMenu 后,激活会通过 `AXUIElement` 直接 setFrontmost,**避免目标 App 弹出后被 macOS 14+ 焦点保护反弹**。不授权也能用,只是某些场景下目标 App 会被原前台 App 抢回焦点
+- 首次启动会弹窗请求 **辅助功能** 权限。在 **系统设置 > 隐私与安全性 > 辅助功能** 勾选 SuperCloudys 后,激活会通过 `AXUIElement` 直接 setFrontmost,**避免目标 App 弹出后被 macOS 14+ 焦点保护反弹**。不授权也能用,只是某些场景下目标 App 会被原前台 App 抢回焦点
 
 > ⚠️ Cmd+数字 是全局快捷键,会"抢走"其他 App 内的同款快捷键(如浏览器切换标签页)。如果按了 Cmd+N 目标 App 弹出后立刻被反弹,通常是 **另一个工具(如 Magnet、Rectangle 等)注册了相同热键** —— 在菜单栏关闭或退出冲突的工具即可。
 
 ## 性能调优经验
 
-如果遇到 Finder 右键卡顿,真凶常常**不在 RMenu 本身**,而在其他启用的 Finder Sync 扩展(Finder 必须等所有扩展返回菜单才能显示)。可用项目自带的诊断脚本定位:
+如果遇到 Finder 右键卡顿,真凶常常**不在 SuperCloudys 本身**,而在其他启用的 Finder Sync 扩展(Finder 必须等所有扩展返回菜单才能显示)。可用项目自带的诊断脚本定位:
 
 ```bash
 ./scripts/diagnose_rightclick.sh
@@ -137,7 +137,7 @@ killall Finder
 
 脚本会同时:
 1. 采样 Finder 主线程 3 秒
-2. 抓取 RMenu 扩展的 `os_log` perf 数据
+2. 抓取 SuperCloudys 扩展的 `os_log` perf 数据
 3. 检查 `spindump` 慢响应报告
 
 排查命令:
@@ -151,10 +151,10 @@ pluginkit -e ignore -i <bundle.id>
 killall Finder
 ```
 
-RMenu 自身的 `menu(for:)` 实现已优化到 **稳态 < 0.5ms**(后台预构建 MenuSnapshot,主线程纯组装 NSMenu)。perf 日志默认 debug 级,需要时:
+SuperCloudys 自身的 `menu(for:)` 实现已优化到 **稳态 < 0.5ms**(后台预构建 MenuSnapshot,主线程纯组装 NSMenu)。perf 日志默认 debug 级,需要时:
 
 ```bash
-log stream --level debug --predicate 'subsystem == "com.yeshan333.RMenu"'
+log stream --level debug --predicate 'subsystem == "com.yeshan333.SuperCloudys"'
 ```
 
 ## 测试
@@ -162,8 +162,8 @@ log stream --level debug --predicate 'subsystem == "com.yeshan333.RMenu"'
 ```bash
 xcodegen generate
 xcodebuild test \
-  -project RMenu.xcodeproj \
-  -scheme RMenuTests \
+  -project SuperCloudys.xcodeproj \
+  -scheme SuperCloudysTests \
   -destination 'platform=macOS'
 ```
 
@@ -172,15 +172,15 @@ xcodebuild test \
 ## 项目结构
 
 ```
-r-menu/
+SuperCloudys/
 ├── project.yml                       # XcodeGen 项目配置
-├── RMenu/                            # 主应用(菜单栏)
-│   ├── RMenuApp.swift                # App 入口
+├── SuperCloudys/                     # 主应用(菜单栏)
+│   ├── SuperCloudysApp.swift         # App 入口
 │   ├── MenuBarView.swift             # 菜单栏 UI
 │   ├── Dock/                         # Dock 快捷键功能
 │   │   ├── DockApp.swift             # 模型
 │   │   ├── DockReader.swift          # 解析 Dock plist
-│   │   ├── DockAppLauncher.swift     # launch/hide toggle
+│   │   ├── DockAppLauncher.swift     # launch/hide toggle + 窗口轮换
 │   │   ├── DockShortcutManager.swift # Carbon 全局快捷键注册
 │   │   ├── DockMonitor.swift         # 后台轮询 + 状态
 │   │   └── AccessibilityActivator.swift # AXUIElement 激活(绕焦点保护)
@@ -191,27 +191,28 @@ r-menu/
 │   │   ├── LoginItemManager.swift    # 开机自启 (SMAppService)
 │   │   └── IconPrewarmer.swift       # 启动时预热 LaunchServices
 │   ├── Info.plist
-│   └── RMenu.entitlements
-├── RMenuExtension/                   # Finder Sync 扩展
+│   └── SuperCloudys.entitlements
+├── SuperCloudysExtension/            # Finder Sync 扩展
 │   ├── FinderSync.swift              # 扩展入口 (MenuSnapshot 预构建)
 │   ├── AppLocator.swift              # 应用定位检测
 │   ├── Actions/
 │   │   ├── OpenAppAction.swift       # 打开应用动作
 │   │   └── CopyPathAction.swift      # 复制路径动作
 │   ├── Info.plist
-│   └── RMenuExtension.entitlements
+│   └── SuperCloudysExtension.entitlements
 ├── Shared/                           # 两个 Target 共享代码
 │   ├── Constants.swift               # 常量 & ExternalApp 模型
 │   ├── CustomAppStore.swift          # 自定义应用持久化(JSON, mtime 缓存)
 │   └── DockShortcutSettings.swift    # 快捷键启用状态
-├── RMenuTests/                       # 单元测试
+├── SuperCloudysTests/                # 单元测试
 │   ├── DockAppTests.swift
-│   └── DockReaderTests.swift
+│   ├── DockReaderTests.swift
+│   └── WindowCycleTests.swift
 ├── scripts/
 │   ├── install-local.sh              # 本地一键 build + 替换 + 重启(稳定签名)
 │   ├── create-dmg.sh                 # DMG 打包脚本
 │   ├── diagnose_rightclick.sh        # 右键卡顿诊断
-│   └── rmenu-icon.svg                # App 图标源文件(改色调后用 rsvg-convert 重新导出)
+│   └── supercloudys-icon.svg         # App 图标源文件(改色调后用 rsvg-convert 重新导出)
 └── .github/workflows/
     └── build.yml                     # CI: 自动构建 & 发布 DMG
 ```
@@ -225,8 +226,8 @@ r-menu/
 
 ```bash
 # 发布新版本
-git tag v1.2.0
-git push origin v1.2.0
+git tag v1.4.0
+git push origin v1.4.0
 ```
 
 ## 技术实现
@@ -234,7 +235,7 @@ git push origin v1.2.0
 - **Finder Sync Extension** (`FIFinderSync`) 注入右键菜单项;`MenuSnapshot` 模式在后台 utility queue 预构建菜单数据(apps + icons + mtime),主线程 `menu(for:)` 仅做 NSMenu 组装,稳态 < 0.5ms
 - **Carbon `RegisterEventHotKey`** 注册 Cmd+1~0 全局快捷键(注册本身不需要 Accessibility 权限)
 - **激活策略双路径**:授权 Accessibility 后用 `AXUIElement` setFrontmost(绕 macOS 14+ 焦点保护) + `NSRunningApplication.activate()` 确保窗口切换到当前 Space;多窗口应用通过 `kAXWindowsAttribute` 枚举窗口并 `AXRaise` 实现轮换
-- **`CFPreferences` / 直接读 plist** 解析 Dock 配置,沙盒下通过 `com.apple.security.temporary-exception.files.absolute-path.read-write` 入境
+- **`CFPreferences` / 直接读 plist** 解析 Dock 配置
 - **`SMAppService.mainApp`** 实现开机自启(macOS 13+)
 - **SwiftUI `MenuBarExtra`** 实现菜单栏管理界面
 - **主应用无沙盒**(Accessibility API 需要直接操作其他进程窗口);Finder 扩展仍保留独立沙盒

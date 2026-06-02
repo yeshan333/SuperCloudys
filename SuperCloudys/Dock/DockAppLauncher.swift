@@ -3,7 +3,7 @@ import os
 
 enum DockAppLauncher {
 
-    private static let log = Logger(subsystem: "com.yeshan333.RMenu", category: "DockLauncher")
+    private static let log = Logger(subsystem: "com.yeshan333.SuperCloudys", category: "DockLauncher")
 
     private static var cycleCount = 0
     private static var cyclingBundleID: String?

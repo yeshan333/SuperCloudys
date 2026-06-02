@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build, install, and relaunch RMenu locally with a *stable* self-signed
+# Build, install, and relaunch SuperCloudys locally with a *stable* self-signed
 # identity so macOS TCC (Accessibility, etc.) survives rebuilds.
 #
 # First run: imports a long-lived cert into your login keychain (one prompt),
@@ -7,10 +7,10 @@
 # Subsequent runs: no prompts, no TCC re-grant — just rebuild & restart.
 set -euo pipefail
 
-CERT_CN="RMenu Local Dev"
+CERT_CN="SuperCloudys Local Dev"
 INSTALL_DIR="$HOME/Applications"
-APP_NAME="RMenu.app"
-DERIVED="/tmp/rmenu-build"
+APP_NAME="SuperCloudys.app"
+DERIVED="/tmp/supercloudys-build"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_ROOT"
 
@@ -48,27 +48,27 @@ build_signed() {
   echo "→ Building Release with identity: $CERT_CN"
   rm -rf "$DERIVED"
   xcodebuild \
-    -project RMenu.xcodeproj \
-    -scheme RMenu \
+    -project SuperCloudys.xcodeproj \
+    -scheme SuperCloudys \
     -configuration Release \
     -destination 'platform=macOS' \
     -derivedDataPath "$DERIVED" \
     CODE_SIGN_IDENTITY="$CERT_CN" \
     CODE_SIGNING_REQUIRED=YES \
     CODE_SIGNING_ALLOWED=YES \
-    clean build >/tmp/rmenu-build.log 2>&1 || {
+    clean build >/tmp/supercloudys-build.log 2>&1 || {
       echo "✗ Build failed. Last 30 lines:"
-      tail -30 /tmp/rmenu-build.log
+      tail -30 /tmp/supercloudys-build.log
       exit 1
     }
   echo "✓ Build succeeded."
 }
 
 stop_running() {
-  osascript -e "quit app \"RMenu\"" 2>/dev/null || true
+  osascript -e "quit app \"SuperCloudys\"" 2>/dev/null || true
   sleep 1
-  pkill -x RMenu 2>/dev/null || true
-  pkill -f RMenuExtension 2>/dev/null || true
+  pkill -x SuperCloudys 2>/dev/null || true
+  pkill -f SuperCloudysExtension 2>/dev/null || true
   sleep 1
 }
 
@@ -81,10 +81,10 @@ install_and_launch() {
   /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$dst"
   open "$dst"
   sleep 1
-  if pgrep -xf "$dst/Contents/MacOS/RMenu" >/dev/null; then
-    echo "✓ RMenu is running from $dst"
+  if pgrep -xf "$dst/Contents/MacOS/SuperCloudys" >/dev/null; then
+    echo "✓ SuperCloudys is running from $dst"
   else
-    echo "✗ RMenu did not start. Check Console for errors."
+    echo "✗ SuperCloudys did not start. Check Console for errors."
     exit 1
   fi
 }

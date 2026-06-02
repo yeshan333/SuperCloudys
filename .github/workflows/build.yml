@@ -57,7 +57,7 @@ jobs:
           prompt = no
 
           [req_dn]
-          CN = RMenu Development
+          CN = SuperCloudys Development
 
           [codesign_ext]
           keyUsage = critical, digitalSignature
@@ -98,11 +98,11 @@ jobs:
       - name: Build
         run: |
           xcodebuild \
-            -project RMenu.xcodeproj \
-            -scheme RMenu \
+            -project SuperCloudys.xcodeproj \
+            -scheme SuperCloudys \
             -configuration Release \
             build \
-            CODE_SIGN_IDENTITY="RMenu Development" \
+            CODE_SIGN_IDENTITY="SuperCloudys Development" \
             CODE_SIGNING_REQUIRED=YES \
             CODE_SIGNING_ALLOWED=YES \
             CONFIGURATION_BUILD_DIR="$(pwd)/build"
@@ -110,8 +110,8 @@ jobs:
       - name: Create DMG
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          DMG_NAME="RMenu-${VERSION}.dmg"
-          ./scripts/create-dmg.sh build/RMenu.app "build/$DMG_NAME"
+          DMG_NAME="SuperCloudys-${VERSION}.dmg"
+          ./scripts/create-dmg.sh build/SuperCloudys.app "build/$DMG_NAME"
           echo "DMG_NAME=$DMG_NAME" >> "$GITHUB_ENV"
 
       - name: Upload artifact

@@ -1,5 +1,5 @@
 import XCTest
-@testable import RMenu
+@testable import SuperCloudys
 
 final class DockAppTests: XCTestCase {
 

@@ -1,7 +1,7 @@
 import ServiceManagement
 import Combine
 
-/// 用 SMAppService.mainApp (macOS 13+) 管理 RMenu 的开机自启状态。
+/// 用 SMAppService.mainApp (macOS 13+) 管理 SuperCloudys 的开机自启状态。
 /// 整个 App 一份实例,菜单栏 Toggle 读写 isEnabled。
 @MainActor
 final class LoginItemManager: ObservableObject {

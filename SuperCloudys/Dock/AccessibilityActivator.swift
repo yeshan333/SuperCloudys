@@ -4,7 +4,7 @@ import os
 
 enum AccessibilityActivator {
 
-    private static let log = Logger(subsystem: "com.yeshan333.RMenu", category: "AXActivator")
+    private static let log = Logger(subsystem: "com.yeshan333.SuperCloudys", category: "AXActivator")
 
     static var isTrusted: Bool { AXIsProcessTrusted() }
 

@@ -36,6 +36,6 @@
 
     <!-- Bar 3 (highlighted - selected item) -->
     <rect x="200" y="600" width="624" height="84" rx="42" ry="42" fill="#FFFFFF" opacity="0.95"/>
-    <text x="248" y="662" font-family="-apple-system, SF Pro Display, Helvetica" font-size="56" font-weight="700" fill="#3FA060">R-Menu</text>
+    <text x="248" y="662" font-family="-apple-system, SF Pro Display, Helvetica" font-size="56" font-weight="700" fill="#3FA060">SuperCloudys</text>
   </g>
 </svg>

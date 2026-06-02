@@ -2,11 +2,11 @@
 set -euo pipefail
 
 # Usage: ./scripts/create-dmg.sh <app_path> <output_dmg_path> [volume_name]
-# Example: ./scripts/create-dmg.sh build/RMenu.app build/RMenu-v1.0.0.dmg RMenu
+# Example: ./scripts/create-dmg.sh build/SuperCloudys.app build/SuperCloudys-v1.0.0.dmg SuperCloudys
 
 APP_PATH="${1:?Usage: create-dmg.sh <app_path> <output_dmg_path> [volume_name]}"
 OUTPUT_DMG="${2:?Usage: create-dmg.sh <app_path> <output_dmg_path> [volume_name]}"
-VOLUME_NAME="${3:-RMenu}"
+VOLUME_NAME="${3:-SuperCloudys}"
 
 if [ ! -d "$APP_PATH" ]; then
   echo "Error: $APP_PATH not found"

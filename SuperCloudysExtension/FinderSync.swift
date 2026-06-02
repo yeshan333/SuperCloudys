@@ -19,7 +19,7 @@ class FinderSync: FIFinderSync {
     private let snapshotLock = NSLock()
     private var snapshot: MenuSnapshot?
 
-    private static let log = Logger(subsystem: "com.yeshan333.RMenu", category: "perf")
+    private static let log = Logger(subsystem: "com.yeshan333.SuperCloudys", category: "perf")
 
     override init() {
         let t0 = Date()

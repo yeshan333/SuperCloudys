@@ -1,8 +1,8 @@
 import Foundation
 
 enum AppConstants {
-    static let extensionBundleID = "com.yeshan333.RMenu.FinderSyncExtension"
-    static let appName = "RMenu"
+    static let extensionBundleID = "com.yeshan333.SuperCloudys.FinderSyncExtension"
+    static let appName = "SuperCloudys"
 }
 
 struct ExternalApp {

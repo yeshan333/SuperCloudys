@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct RMenuApp: App {
+struct SuperCloudysApp: App {
     @StateObject private var dockMonitor = DockMonitor()
     @StateObject private var loginItem = LoginItemManager()
 

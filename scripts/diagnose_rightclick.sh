@@ -1,5 +1,5 @@
 #!/bin/bash
-# 测量 Finder 右键卡顿:同时 sample Finder 主线程 + 抓 RMenu 扩展 perf log
+# 测量 Finder 右键卡顿:同时 sample Finder 主线程 + 抓 SuperCloudys 扩展 perf log
 # 用法: ./diagnose_rightclick.sh
 # 流程: 倒计时 3 秒 -> 你立刻在 Finder 右键一次 -> sample 3 秒结束 -> 输出报告
 
@@ -11,11 +11,11 @@ if [ -z "$FINDER_PID" ]; then
     exit 1
 fi
 
-EXT_PID=$(pgrep -x RMenuExtension | head -1)
+EXT_PID=$(pgrep -x SuperCloudysExtension | head -1)
 if [ -z "$EXT_PID" ]; then
-    echo "⚠️  RMenuExtension 未启动 (pkd 可能已回收)。继续测试 — 第一次右键会触发冷启动。"
+    echo "⚠️  SuperCloudysExtension 未启动 (pkd 可能已回收)。继续测试 — 第一次右键会触发冷启动。"
 else
-    echo "ℹ️  RMenuExtension PID: $EXT_PID (扩展已驻留)"
+    echo "ℹ️  SuperCloudysExtension PID: $EXT_PID (扩展已驻留)"
 fi
 echo "ℹ️  Finder PID: $FINDER_PID"
 echo ""
@@ -41,12 +41,12 @@ echo "✅ 采样完成 ($ELAPSED 秒)"
 echo ""
 
 echo "================================================================"
-echo "  ⬇️  RMenu 扩展 perf log (采样窗口内)"
+echo "  ⬇️  SuperCloudys 扩展 perf log (采样窗口内)"
 echo "================================================================"
 /usr/bin/log show --start "$START_TIME" --end "$END_TIME" \
-    --predicate 'subsystem == "com.yeshan333.RMenu"' --style compact 2>/dev/null \
+    --predicate 'subsystem == "com.yeshan333.SuperCloudys"' --style compact 2>/dev/null \
     | grep -v "^Timestamp" \
-    | sed -E 's/^[^[]*\[[0-9:]+ /[/;s/^.*com.yeshan333.RMenu:perf\] /  /'
+    | sed -E 's/^[^[]*\[[0-9:]+ /[/;s/^.*com.yeshan333.SuperCloudys:perf\] /  /'
 
 echo ""
 echo "================================================================"
@@ -81,6 +81,6 @@ echo ""
 echo "(完整 sample: $SAMPLE_FILE)"
 echo ""
 echo "📊 解读:"
-echo "  - 看到 RMenu 的 menu(for:) total < 50ms 说明 RMenu 不是瓶颈"
+echo "  - 看到 SuperCloudys 的 menu(for:) total < 50ms 说明 SuperCloudys 不是瓶颈"
 echo "  - 看到 spindump 'slow hid response' 说明 Finder 主线程被卡了"
 echo "  - 看 Finder 调用栈顶层是什么函数 — 那就是真正的 2 秒花在哪"

@@ -1,4 +1,4 @@
-name: RMenu
+name: SuperCloudys
 options:
   bundleIdPrefix: com.yeshan333
   deploymentTarget:
@@ -11,56 +11,56 @@ settings:
     MACOSX_DEPLOYMENT_TARGET: "14.0"
 
 targets:
-  RMenu:
+  SuperCloudys:
     type: application
     platform: macOS
     sources:
-      - path: RMenu
+      - path: SuperCloudys
         excludes:
           - "**/*.entitlements"
       - path: Shared
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.yeshan333.RMenu
-        INFOPLIST_FILE: RMenu/Info.plist
-        CODE_SIGN_ENTITLEMENTS: RMenu/RMenu.entitlements
+        PRODUCT_BUNDLE_IDENTIFIER: com.yeshan333.SuperCloudys
+        INFOPLIST_FILE: SuperCloudys/Info.plist
+        CODE_SIGN_ENTITLEMENTS: SuperCloudys/SuperCloudys.entitlements
         ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES: true
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
     dependencies:
-      - target: RMenuExtension
+      - target: SuperCloudysExtension
         embed: true
         codeSign: true
         buildPhase:
           copyFiles:
             destination: plugins
 
-  RMenuExtension:
+  SuperCloudysExtension:
     type: app-extension
     platform: macOS
     sources:
-      - path: RMenuExtension
+      - path: SuperCloudysExtension
         excludes:
           - "**/*.entitlements"
       - path: Shared
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.yeshan333.RMenu.FinderSyncExtension
-        INFOPLIST_FILE: RMenuExtension/Info.plist
-        CODE_SIGN_ENTITLEMENTS: RMenuExtension/RMenuExtension.entitlements
+        PRODUCT_BUNDLE_IDENTIFIER: com.yeshan333.SuperCloudys.FinderSyncExtension
+        INFOPLIST_FILE: SuperCloudysExtension/Info.plist
+        CODE_SIGN_ENTITLEMENTS: SuperCloudysExtension/SuperCloudysExtension.entitlements
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../../../../../Frameworks"
     frameworks:
       - sdk: FinderSync.framework
 
-  RMenuTests:
+  SuperCloudysTests:
     type: bundle.unit-test
     platform: macOS
     sources:
-      - path: RMenuTests
+      - path: SuperCloudysTests
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.yeshan333.RMenuTests
+        PRODUCT_BUNDLE_IDENTIFIER: com.yeshan333.SuperCloudysTests
         GENERATE_INFOPLIST_FILE: YES
         BUNDLE_LOADER: "$(TEST_HOST)"
-        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/RMenu.app/Contents/MacOS/RMenu"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/SuperCloudys.app/Contents/MacOS/SuperCloudys"
     dependencies:
-      - target: RMenu
+      - target: SuperCloudys

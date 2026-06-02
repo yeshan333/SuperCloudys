@@ -11,15 +11,20 @@ enum CustomAppStore {
     // MARK: - Path (computed once)
 
     private static let configURL: URL = {
-        // 使用绝对路径(非沙盒),确保宿主 App 和扩展读写同一个文件
         let home = NSHomeDirectory()
             .components(separatedBy: "/Library/Containers").first
             ?? ("/Users/" + NSUserName())
-        let dir = URL(fileURLWithPath: home)
-            .appendingPathComponent("Library/Application Support/RMenu")
-        try? FileManager.default.createDirectory(
-            at: dir, withIntermediateDirectories: true
-        )
+        let base = URL(fileURLWithPath: home)
+        let dir = base.appendingPathComponent("Library/Application Support/SuperCloudys")
+
+        // Migrate from legacy "RMenu" directory if present
+        let legacy = base.appendingPathComponent("Library/Application Support/RMenu")
+        let fm = FileManager.default
+        if fm.fileExists(atPath: legacy.path), !fm.fileExists(atPath: dir.path) {
+            try? fm.moveItem(at: legacy, to: dir)
+        }
+
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("custom_apps.json")
     }()
 
