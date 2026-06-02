@@ -5,13 +5,17 @@ enum DockAppLauncher {
 
     private static let log = Logger(subsystem: "com.yeshan333.RMenu", category: "DockLauncher")
 
-    /// Toggle: if the app is frontmost, hide it; otherwise launch/activate it.
-    /// `appPath` (from the Dock plist) is preferred over LaunchServices lookup,
-    /// which can silently return nil under App Sandbox.
+    private static var cycleCount = 0
+    private static var cyclingBundleID: String?
+
+    /// Toggle: if the app is frontmost, cycle its windows then hide after
+    /// all windows have been shown. Otherwise launch/activate it.
     static func toggle(bundleID: String, appPath: String = "") {
         if isFrontmost(bundleID: bundleID) {
-            hide(bundleID: bundleID)
+            cycleOrHide(bundleID: bundleID)
         } else {
+            cycleCount = 0
+            cyclingBundleID = nil
             launchOrFocus(bundleID: bundleID, appPath: appPath)
         }
     }
@@ -27,10 +31,7 @@ enum DockAppLauncher {
             withBundleIdentifier: bundleID
         ).first {
             if running.isHidden { running.unhide() }
-            // AX bypasses macOS 14+ focus-stealing when granted; falls back otherwise.
-            if AccessibilityActivator.activate(pid: running.processIdentifier) {
-                return
-            }
+            AccessibilityActivator.activate(pid: running.processIdentifier)
             if #available(macOS 14.0, *) {
                 running.activate()
             } else {
@@ -59,10 +60,33 @@ enum DockAppLauncher {
         return NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
     }
 
-    private static func hide(bundleID: String) {
+    private static func cycleOrHide(bundleID: String) {
         guard let running = NSRunningApplication.runningApplications(
             withBundleIdentifier: bundleID
         ).first else { return }
-        running.hide()
+
+        if cyclingBundleID != bundleID {
+            cycleCount = 0
+            cyclingBundleID = bundleID
+        }
+
+        let windowCount = AccessibilityActivator.windowCount(
+            pid: running.processIdentifier
+        )
+        // Already cycled through all windows → hide
+        if windowCount <= 1 || cycleCount >= windowCount - 1 {
+            running.hide()
+            cycleCount = 0
+            cyclingBundleID = nil
+            return
+        }
+
+        if AccessibilityActivator.cycleWindows(pid: running.processIdentifier) {
+            cycleCount += 1
+        } else {
+            running.hide()
+            cycleCount = 0
+            cyclingBundleID = nil
+        }
     }
 }

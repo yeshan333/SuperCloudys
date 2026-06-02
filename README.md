@@ -21,7 +21,8 @@ macOS 桌面增效工具:**Finder 右键菜单增强** + **Dock 全局快捷键*
 - **Cmd+1 ~ Cmd+9 / Cmd+0** - 一键激活/隐藏 Dock 中的前 10 个应用
   - 应用未运行 → **冷启动**(直接用 Dock plist 里的路径,不依赖 LaunchServices 查询,沙盒下也稳)
   - 应用在后台 → 聚焦到前台
-  - 应用在前台 → 隐藏(toggle)
+  - 应用在前台且有多个窗口 → **依次轮换窗口**,全部轮换完后隐藏
+  - 应用在前台且只有单窗口 → 隐藏(toggle)
 - **自动跟随 Dock 变化** - 后台每 5 秒轮询 Dock 配置,自动重新绑定
 - **全局开关** - 菜单栏一键禁用/启用所有快捷键
 - **辅助功能授权(推荐)** - 授予后通过 `AXUIElement` 激活目标 App,绕过 macOS 14+ 焦点保护;未授权自动 fallback 到 `NSRunningApplication.activate()`
@@ -119,7 +120,7 @@ killall Finder
 
 启动 RMenu 后,Cmd+1 ~ Cmd+9、Cmd+0 自动映射到 Dock 中的前 10 个应用:
 
-- 按 **Cmd+N** 激活第 N 个应用(N 在前台时改为隐藏,实现 toggle)
+- 按 **Cmd+N** 激活第 N 个应用;应用已在前台时,先依次轮换窗口(多窗口),全部轮换完后隐藏
 - Dock 顺序变化后 5 秒内自动重新绑定
 - 在菜单栏关闭"启用 Cmd+1~0 快捷键"Toggle 可整体禁用
 - 首次启动会弹窗请求 **辅助功能** 权限。在 **系统设置 > 隐私与安全性 > 辅助功能** 勾选 RMenu 后,激活会通过 `AXUIElement` 直接 setFrontmost,**避免目标 App 弹出后被 macOS 14+ 焦点保护反弹**。不授权也能用,只是某些场景下目标 App 会被原前台 App 抢回焦点
@@ -166,7 +167,7 @@ xcodebuild test \
   -destination 'platform=macOS'
 ```
 
-覆盖 `DockApp.shortcutLabel` 和 `DockReader.parseApps` 的 15 个用例(含 Dock 含 spacer/separator tile 的回归测试)。
+覆盖 `DockApp.shortcutLabel`、`DockReader.parseApps` 及窗口轮换逻辑的 20 个用例(含 Dock 含 spacer/separator tile 的回归测试及 Accessibility 守卫验证)。
 
 ## 项目结构
 
@@ -232,11 +233,11 @@ git push origin v1.2.0
 
 - **Finder Sync Extension** (`FIFinderSync`) 注入右键菜单项;`MenuSnapshot` 模式在后台 utility queue 预构建菜单数据(apps + icons + mtime),主线程 `menu(for:)` 仅做 NSMenu 组装,稳态 < 0.5ms
 - **Carbon `RegisterEventHotKey`** 注册 Cmd+1~0 全局快捷键(注册本身不需要 Accessibility 权限)
-- **激活策略双路径**:授权 Accessibility 后用 `AXUIElement` setFrontmost(绕 macOS 14+ 焦点保护),否则 fallback 到 `NSRunningApplication.activate()`;`.hide()` 隐藏,全程避免 AppleScript / Automation 权限
+- **激活策略双路径**:授权 Accessibility 后用 `AXUIElement` setFrontmost(绕 macOS 14+ 焦点保护) + `NSRunningApplication.activate()` 确保窗口切换到当前 Space;多窗口应用通过 `kAXWindowsAttribute` 枚举窗口并 `AXRaise` 实现轮换
 - **`CFPreferences` / 直接读 plist** 解析 Dock 配置,沙盒下通过 `com.apple.security.temporary-exception.files.absolute-path.read-write` 入境
 - **`SMAppService.mainApp`** 实现开机自启(macOS 13+)
 - **SwiftUI `MenuBarExtra`** 实现菜单栏管理界面
-- **App Sandbox** 启用以满足 macOS 扩展加载要求
+- **主应用无沙盒**(Accessibility API 需要直接操作其他进程窗口);Finder 扩展仍保留独立沙盒
 - **XcodeGen** 管理项目配置,避免 `.xcodeproj` 冲突
 - 自定义应用配置通过 JSON 文件在主应用与扩展间共享,带 mtime 缓存避免重复磁盘读
 
