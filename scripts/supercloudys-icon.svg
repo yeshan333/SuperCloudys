@@ -1,41 +1,70 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#E8F7DA"/>
-      <stop offset="55%" stop-color="#A6DE9C"/>
-      <stop offset="100%" stop-color="#6BC079"/>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6DD5FA"/>
+      <stop offset="50%" stop-color="#2980B9"/>
+      <stop offset="100%" stop-color="#1A5276"/>
     </linearGradient>
-    <linearGradient id="hi" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.35"/>
-      <stop offset="50%" stop-color="#FFFFFF" stop-opacity="0"/>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.30"/>
+      <stop offset="45%" stop-color="#FFFFFF" stop-opacity="0"/>
     </linearGradient>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur in="SourceAlpha" stdDeviation="14"/>
-      <feOffset dx="0" dy="14"/>
-      <feComponentTransfer><feFuncA type="linear" slope="0.28"/></feComponentTransfer>
+    <linearGradient id="bolt" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFE066"/>
+      <stop offset="100%" stop-color="#FFA500"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="18"/>
+    </filter>
+    <filter id="shadow" x="-15%" y="-15%" width="130%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="12"/>
+      <feOffset dx="0" dy="10"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.25"/></feComponentTransfer>
       <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
   </defs>
 
-  <!-- Squircle-ish background -->
+  <!-- Squircle background -->
   <rect x="80" y="80" width="864" height="864" rx="200" ry="200" fill="url(#bg)"/>
-  <!-- Top sheen -->
-  <rect x="80" y="80" width="864" height="432" rx="200" ry="200" fill="url(#hi)"/>
+  <rect x="80" y="80" width="864" height="432" rx="200" ry="200" fill="url(#sheen)"/>
 
-  <!-- Menu glyph: rounded white bars with subtle drop shadow -->
+  <!-- Cloud body -->
   <g filter="url(#shadow)">
-    <!-- Bar 1 -->
-    <rect x="270" y="340" width="484" height="64" rx="32" ry="32" fill="#FFFFFF"/>
-    <!-- Dot 1 -->
-    <circle cx="220" cy="372" r="32" fill="#FFFFFF"/>
-
-    <!-- Bar 2 -->
-    <rect x="270" y="480" width="380" height="64" rx="32" ry="32" fill="#FFFFFF"/>
-    <!-- Dot 2 -->
-    <circle cx="220" cy="512" r="32" fill="#FFFFFF"/>
-
-    <!-- Bar 3 (highlighted - selected item) -->
-    <rect x="200" y="600" width="624" height="84" rx="42" ry="42" fill="#FFFFFF" opacity="0.95"/>
-    <text x="248" y="662" font-family="-apple-system, SF Pro Display, Helvetica" font-size="56" font-weight="700" fill="#3FA060">SuperCloudys</text>
+    <!-- Main cloud shape built from overlapping circles + base rect -->
+    <ellipse cx="512" cy="520" rx="220" ry="140" fill="#FFFFFF"/>
+    <ellipse cx="380" cy="540" rx="140" ry="110" fill="#FFFFFF"/>
+    <ellipse cx="640" cy="540" rx="150" ry="115" fill="#FFFFFF"/>
+    <ellipse cx="460" cy="460" rx="120" ry="100" fill="#FFFFFF"/>
+    <ellipse cx="570" cy="445" rx="110" ry="95" fill="#FFFFFF"/>
+    <rect x="270" y="520" width="480" height="120" rx="60" ry="60" fill="#FFFFFF"/>
   </g>
+
+  <!-- Lightning bolt -->
+  <g filter="url(#shadow)">
+    <polygon points="530,340 470,510 520,510 460,700 580,470 525,470 575,340" fill="url(#bolt)"/>
+  </g>
+
+  <!-- Sparkle stars -->
+  <!-- Top-left sparkle -->
+  <g transform="translate(260,300)" opacity="0.9">
+    <line x1="0" y1="-22" x2="0" y2="22" stroke="#FFE066" stroke-width="6" stroke-linecap="round"/>
+    <line x1="-22" y1="0" x2="22" y2="0" stroke="#FFE066" stroke-width="6" stroke-linecap="round"/>
+    <line x1="-14" y1="-14" x2="14" y2="14" stroke="#FFE066" stroke-width="4" stroke-linecap="round"/>
+    <line x1="14" y1="-14" x2="-14" y2="14" stroke="#FFE066" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  <!-- Top-right sparkle (smaller) -->
+  <g transform="translate(740,350)" opacity="0.7">
+    <line x1="0" y1="-16" x2="0" y2="16" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round"/>
+    <line x1="-16" y1="0" x2="16" y2="0" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round"/>
+    <line x1="-10" y1="-10" x2="10" y2="10" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+    <line x1="10" y1="-10" x2="-10" y2="10" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+  </g>
+  <!-- Small sparkle -->
+  <g transform="translate(320,420)" opacity="0.6">
+    <line x1="0" y1="-10" x2="0" y2="10" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/>
+    <line x1="-10" y1="0" x2="10" y2="0" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/>
+  </g>
+
+  <!-- Bolt glow effect -->
+  <polygon points="530,340 470,510 520,510 460,700 580,470 525,470 575,340" fill="#FFE066" opacity="0.3" filter="url(#glow)"/>
 </svg>
