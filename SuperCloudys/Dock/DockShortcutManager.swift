@@ -87,11 +87,11 @@ final class DockShortcutManager {
             let manager = Unmanaged<DockShortcutManager>
                 .fromOpaque(userData)
                 .takeUnretainedValue()
-            if let entry = manager.handlers[hotKeyID.id] {
-                // Run synchronously so the Carbon-granted activation token
-                // doesn't expire before we call activate().
-                DockAppLauncher.toggle(bundleID: entry.bundleID, appPath: entry.appPath)
+            guard hotKeyID.signature == DockShortcutManager.signature,
+                  let entry = manager.handlers[hotKeyID.id] else {
+                return OSStatus(eventNotHandledErr)
             }
+            DockAppLauncher.toggle(bundleID: entry.bundleID, appPath: entry.appPath)
             return noErr
         }
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()

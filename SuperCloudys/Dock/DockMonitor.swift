@@ -20,8 +20,6 @@ final class DockMonitor: ObservableObject {
 
     init() {
         self.shortcutsEnabled = DockShortcutSettings.shortcutsEnabled
-        // Prompt once for Accessibility so AXUIElement-based activation works.
-        AccessibilityActivator.requestTrust()
         refresh(forceRegister: true)
         startPolling()
     }

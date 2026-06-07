@@ -6,8 +6,14 @@ struct SuperCloudysApp: App {
     @StateObject private var loginItem = LoginItemManager()
 
     init() {
-        // 后台预热 LaunchServices 图标缓存,降低 Finder 扩展冷启动开销
         IconPrewarmer.prewarmInBackground()
+        guard !Self.isRunningTests else { return }
+        ClipboardHistoryController.shared.startMonitoring()
+        ClipboardHotkeyManager.shared.register()
+    }
+
+    private static var isRunningTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 
     var body: some Scene {
