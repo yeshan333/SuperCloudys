@@ -11,7 +11,8 @@ final class ClipboardMonitorService {
 
     private let pasteboard = NSPasteboard.general
     private let log = Logger(subsystem: "com.yeshan333.SuperCloudys", category: "ClipboardMonitor")
-    private var timer: Timer?
+    private let pollQueue = DispatchQueue(label: "com.yeshan333.SuperCloudys.clipboardPoll", qos: .utility)
+    private var timer: DispatchSourceTimer?
     private var lastChangeCount: Int
     private var suppressUntil: Date?
     private let settings: ClipboardSettings
@@ -24,17 +25,18 @@ final class ClipboardMonitorService {
 
     func start() {
         guard timer == nil else { return }
-        timer = Timer.scheduledTimer(
-            withTimeInterval: 0.5, repeats: true
-        ) { [weak self] _ in
+        let t = DispatchSource.makeTimerSource(queue: pollQueue)
+        t.schedule(deadline: .now(), repeating: 0.5)
+        t.setEventHandler { [weak self] in
             self?.poll()
         }
-        RunLoop.main.add(timer!, forMode: .common)
+        t.resume()
+        timer = t
         log.info("Clipboard monitor started")
     }
 
     func stop() {
-        timer?.invalidate()
+        timer?.cancel()
         timer = nil
         log.info("Clipboard monitor stopped")
     }
@@ -213,18 +215,16 @@ final class ClipboardMonitorService {
         let originalURL = dir.appendingPathComponent("\(id).png")
         let thumbURL = dir.appendingPathComponent("\(id)_thumb.png")
 
-        guard let tiffData = image.tiffRepresentation,
-              let bitmap = NSBitmapImageRep(data: tiffData),
-              let pngData = bitmap.representation(using: .png, properties: [:]) else {
-            return (nil, nil)
-        }
-
-        // Write original synchronously so paths are valid immediately
-        try? pngData.write(to: originalURL)
-
-        // Generate thumbnail on background using Core Graphics (thread-safe)
-        let imageSize = image.size
         Self.imageQueue.async {
+            guard let tiffData = image.tiffRepresentation,
+                  let bitmap = NSBitmapImageRep(data: tiffData),
+                  let pngData = bitmap.representation(using: .png, properties: [:]) else {
+                return
+            }
+
+            try? pngData.write(to: originalURL)
+
+            let imageSize = image.size
             let thumbMaxDim: CGFloat = 320
             let scale = min(thumbMaxDim / imageSize.width, thumbMaxDim / imageSize.height, 1.0)
             let w = Int(imageSize.width * scale)

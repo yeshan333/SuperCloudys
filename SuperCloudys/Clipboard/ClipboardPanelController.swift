@@ -27,6 +27,7 @@ final class ClipboardPanelController {
         }
         guard let panel else { return }
 
+        NSApp.setActivationPolicy(.regular)
         panel.center()
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -34,6 +35,7 @@ final class ClipboardPanelController {
 
     func hide() {
         panel?.orderOut(nil)
+        NSApp.setActivationPolicy(.accessory)
     }
 
     // MARK: - Private

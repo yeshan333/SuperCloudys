@@ -35,20 +35,23 @@ enum CustomAppStore {
     private static var cachedMTime: Date?
 
     static func load() -> [CustomApp] {
-        cacheLock.lock()
-        defer { cacheLock.unlock() }
-
         let currentMTime = fileMTime()
 
-        // Cache hit when both the cached snapshot and the file mtime agree
-        // (also handles "file missing on both sides" => return cached empty)
+        cacheLock.lock()
         if let cached = cachedApps, cachedMTime == currentMTime {
-            return cached
+            let result = cached
+            cacheLock.unlock()
+            return result
         }
+        cacheLock.unlock()
 
         let apps = decodeFromDisk()
+        
+        cacheLock.lock()
         cachedApps = apps
         cachedMTime = currentMTime
+        cacheLock.unlock()
+        
         return apps
     }
 
@@ -56,9 +59,10 @@ enum CustomAppStore {
         guard let data = try? JSONEncoder().encode(apps) else { return }
         try? data.write(to: configURL, options: .atomic)
 
+        let mtime = fileMTime()
         cacheLock.lock()
         cachedApps = apps
-        cachedMTime = fileMTime()
+        cachedMTime = mtime
         cacheLock.unlock()
     }
 

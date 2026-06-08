@@ -16,7 +16,7 @@ struct DockAppsSection: View {
                         Label {
                             Text(rowTitle(for: app))
                         } icon: {
-                            appIcon(path: app.appPath)
+                            AppIconView(path: app.appPath)
                         }
                     }
                 }
@@ -37,14 +37,7 @@ struct DockAppsSection: View {
         return app.name
     }
 
-    private func appIcon(path: String) -> Image {
-        if !path.isEmpty, FileManager.default.fileExists(atPath: path) {
-            let nsImage = NSWorkspace.shared.icon(forFile: path)
-            nsImage.size = NSSize(width: 16, height: 16)
-            return Image(nsImage: nsImage)
-        }
-        return Image(systemName: "app")
-    }
+
 
     private func activate(_ app: DockApp) {
         DockAppLauncher.toggle(bundleID: app.bundleID, appPath: app.appPath)

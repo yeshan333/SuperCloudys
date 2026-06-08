@@ -129,6 +129,13 @@ killall Finder
 
 ## 性能调优经验
 
+主应用的 UI 与后台轮询也经过了深度的性能压榨（极致顺滑体验）：
+1. **彻底消除主线程 I/O**：使用 `AppIconCache` 在 `Task.detached` 后台异步加载 App 图标并驱动 SwiftUI `Image`，菜单栏展开零掉帧。
+2. **后台大图处理**：剪贴板大图片的 PNG 压缩（极度耗时）完全放在专属后台串行队列处理，保证复制设计大图时主线程绝对不冻结。
+3. **事件驱动替代轮询**：废弃了每 5 秒轮询 Dock plist 的后台死循环，改用底层 `DispatchSourceFileSystemObject` 直接监听文件系统修改事件，实现了 0 更新 0 CPU 消耗。
+4. **GCD 后台定时器**：将剪贴板的 `NSPasteboard` 变化检测移除了 `RunLoop.main`，挂载到了专用的 `.utility` QoS 队列的 `DispatchSourceTimer` 上。
+5. **底层锁优化**：`CustomAppStore` 读写分离，分离 JSON 解码与 `NSLock` 的粒度边界，文件 I/O 均在锁外完成。
+
 如果遇到 Finder 右键卡顿,真凶常常**不在 SuperCloudys 本身**,而在其他启用的 Finder Sync 扩展(Finder 必须等所有扩展返回菜单才能显示)。可用项目自带的诊断脚本定位:
 
 ```bash
@@ -185,10 +192,12 @@ SuperCloudys/
 │   │   ├── DockMonitor.swift         # 后台轮询 + 状态
 │   │   └── AccessibilityActivator.swift # AXUIElement 激活(绕焦点保护)
 │   ├── MenuBar/
-│   │   └── DockAppsSection.swift     # 菜单栏 Dock 子区
+│   │   ├── DockAppsSection.swift     # 菜单栏 Dock 子区
+│   │   └── AppIconView.swift         # 异步图标视图
 │   ├── Services/
 │   │   ├── ExtensionStatus.swift     # Finder 扩展状态检测
 │   │   ├── LoginItemManager.swift    # 开机自启 (SMAppService)
+│   │   ├── AppIconCache.swift        # 图标后台缓存
 │   │   └── IconPrewarmer.swift       # 启动时预热 LaunchServices
 │   ├── Info.plist
 │   └── SuperCloudys.entitlements
@@ -235,7 +244,7 @@ git push origin v1.4.0
 - **Finder Sync Extension** (`FIFinderSync`) 注入右键菜单项;`MenuSnapshot` 模式在后台 utility queue 预构建菜单数据(apps + icons + mtime),主线程 `menu(for:)` 仅做 NSMenu 组装,稳态 < 0.5ms
 - **Carbon `RegisterEventHotKey`** 注册 Cmd+1~0 全局快捷键(注册本身不需要 Accessibility 权限)
 - **激活策略双路径**:授权 Accessibility 后用 `AXUIElement` setFrontmost(绕 macOS 14+ 焦点保护) + `NSRunningApplication.activate()` 确保窗口切换到当前 Space;多窗口应用通过 `kAXWindowsAttribute` 枚举窗口并 `AXRaise` 实现轮换
-- **`CFPreferences` / 直接读 plist** 解析 Dock 配置
+- **`CFPreferences` / `DispatchSourceFileSystemObject`** 解析并监听 Dock 配置变更（取代低效轮询）
 - **`SMAppService.mainApp`** 实现开机自启(macOS 13+)
 - **SwiftUI `MenuBarExtra`** 实现菜单栏管理界面
 - **主应用无沙盒**(Accessibility API 需要直接操作其他进程窗口);Finder 扩展仍保留独立沙盒

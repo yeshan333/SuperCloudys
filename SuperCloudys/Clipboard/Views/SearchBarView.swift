@@ -4,6 +4,7 @@ struct SearchBarView: View {
     @Binding var query: String
     @Binding var typeFilter: ClipboardContentType?
     let onDismiss: () -> Void
+    @FocusState private var isSearchFocused: Bool
 
     var body: some View {
         HStack(spacing: 12) {
@@ -16,6 +17,7 @@ struct SearchBarView: View {
             TextField("Type to filter entries...", text: $query)
                 .textFieldStyle(.plain)
                 .font(.system(size: 14))
+                .focused($isSearchFocused)
 
             Picker("", selection: $typeFilter) {
                 Text("All Types").tag(nil as ClipboardContentType?)
@@ -28,6 +30,7 @@ struct SearchBarView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
+        .onAppear { isSearchFocused = true }
     }
 }
 

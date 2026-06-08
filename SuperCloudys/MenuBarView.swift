@@ -33,7 +33,7 @@ struct MenuBarView: View {
                     Label {
                         Text("\(app.name)  (点击移除)")
                     } icon: {
-                        appIconImage(path: app.appPath)
+                        AppIconView(path: app.appPath)
                     }
                 }
             }
@@ -72,14 +72,7 @@ struct MenuBarView: View {
 
     // MARK: - Helpers
 
-    private func appIconImage(path: String) -> Image {
-        if FileManager.default.fileExists(atPath: path) {
-            let nsImage = NSWorkspace.shared.icon(forFile: path)
-            nsImage.size = NSSize(width: 16, height: 16)
-            return Image(nsImage: nsImage)
-        }
-        return Image(systemName: "app")
-    }
+
 
     // MARK: - Actions
 

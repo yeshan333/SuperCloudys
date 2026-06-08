@@ -1,8 +1,8 @@
 import Foundation
 import Combine
 
-/// Reads Dock apps, polls for changes every 5 seconds, and keeps the
-/// global shortcut bindings in sync with the current Dock layout.
+/// Reads Dock apps, observes changes to the Dock plist without polling, 
+/// and keeps the global shortcut bindings in sync with the current Dock layout.
 @MainActor
 final class DockMonitor: ObservableObject {
 
@@ -14,19 +14,17 @@ final class DockMonitor: ObservableObject {
         }
     }
 
-    private let pollInterval: Duration = .seconds(5)
-    private var pollTask: Task<Void, Never>?
+    private var source: DispatchSourceFileSystemObject?
     private var lastBundleIDs: [String] = []
 
     init() {
         self.shortcutsEnabled = DockShortcutSettings.shortcutsEnabled
         refresh(forceRegister: true)
-        startPolling()
+        startMonitoring()
     }
 
     deinit {
-        // Task.cancel() is thread-safe, safe to call from non-isolated deinit.
-        pollTask?.cancel()
+        source?.cancel()
     }
 
     /// Force a re-read of the Dock plist and re-register shortcuts.
@@ -49,13 +47,34 @@ final class DockMonitor: ObservableObject {
         }
     }
 
-    private func startPolling() {
-        pollTask = Task { [weak self, pollInterval] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: pollInterval)
-                if Task.isCancelled { return }
-                await self?.refresh()
+    private func startMonitoring() {
+        let dockPlist = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Preferences/com.apple.dock.plist")
+        monitorFile(at: dockPlist)
+    }
+
+    private func monitorFile(at url: URL) {
+        source?.cancel()
+        
+        let fd = open(url.path, O_EVTONLY)
+        guard fd != -1 else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                self?.monitorFile(at: url)
+            }
+            return
+        }
+
+        let src = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .delete, .rename], queue: DispatchQueue.main)
+        src.setEventHandler { [weak self] in
+            self?.refresh()
+            let data = src.data
+            if data.contains(.delete) || data.contains(.rename) {
+                self?.monitorFile(at: url)
             }
         }
+        src.setCancelHandler {
+            close(fd)
+        }
+        src.resume()
+        self.source = src
     }
 }

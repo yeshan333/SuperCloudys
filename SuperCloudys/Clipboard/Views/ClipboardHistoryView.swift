@@ -43,6 +43,14 @@ struct ClipboardHistoryView: View {
         .onAppear { selectFirst() }
         .onChange(of: controller.filteredEntries) { _ in selectFirst() }
         .onExitCommand { onDismiss() }
+        .onKeyPress(.upArrow) {
+            moveSelection(by: -1)
+            return .handled
+        }
+        .onKeyPress(.downArrow) {
+            moveSelection(by: 1)
+            return .handled
+        }
         .onKeyPress(.return) {
             pasteSelected()
             return .handled
@@ -75,6 +83,18 @@ struct ClipboardHistoryView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             controller.pasteToFrontApp(entry)
         }
+    }
+
+    private func moveSelection(by offset: Int) {
+        let entries = controller.filteredEntries
+        guard !entries.isEmpty else { return }
+        guard let currentID = selectedID,
+              let idx = entries.firstIndex(where: { $0.id == currentID }) else {
+            selectedID = entries.first?.id
+            return
+        }
+        let newIdx = min(max(entries.startIndex, idx + offset), entries.endIndex - 1)
+        selectedID = entries[newIdx].id
     }
 
     private func copySelected() {
