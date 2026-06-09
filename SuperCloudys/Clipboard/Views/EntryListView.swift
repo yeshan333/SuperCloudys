@@ -33,7 +33,7 @@ struct EntryListView: View {
         var order: [String] = []
 
         for entry in entries {
-            let key = dayLabel(for: entry.createdAt, calendar: calendar)
+            let key = entry.isPinned ? "Pinned" : dayLabel(for: entry.lastUsedAt ?? entry.createdAt, calendar: calendar)
             if groups[key] == nil {
                 order.append(key)
                 groups[key] = []

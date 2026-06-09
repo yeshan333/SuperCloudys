@@ -27,28 +27,21 @@ enum DockAppLauncher {
     }
 
     private static func launchOrFocus(bundleID: String, appPath: String) {
-        if let running = NSRunningApplication.runningApplications(
-            withBundleIdentifier: bundleID
-        ).first {
-            if running.isHidden { running.unhide() }
-            AccessibilityActivator.activate(pid: running.processIdentifier)
-            if #available(macOS 14.0, *) {
-                running.activate()
-            } else {
-                running.activate(options: [.activateAllWindows])
-            }
-            return
-        }
-
         guard let appURL = resolveAppURL(bundleID: bundleID, appPath: appPath) else {
             log.warning("Cannot launch \(bundleID, privacy: .public): no URL (path=\(appPath, privacy: .public))")
             return
         }
+
+        // Always use NSWorkspace.shared.openApplication. It handles launching, unhiding,
+        // and bringing the app to the front, avoiding macOS 14+ background activation restrictions.
         let config = NSWorkspace.OpenConfiguration()
         config.activates = true
-        NSWorkspace.shared.openApplication(at: appURL, configuration: config) { _, error in
+        NSWorkspace.shared.openApplication(at: appURL, configuration: config) { app, error in
             if let error {
                 log.error("openApplication failed for \(bundleID, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            } else if let app = app {
+                // As a fallback to ensure all windows are brought forward
+                AccessibilityActivator.activate(pid: app.processIdentifier)
             }
         }
     }

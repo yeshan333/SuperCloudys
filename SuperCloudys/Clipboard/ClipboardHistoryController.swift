@@ -10,6 +10,7 @@ final class ClipboardHistoryController: ObservableObject {
     @Published var searchQuery: String = "" { didSet { scheduleFilter() } }
     @Published var typeFilter: ClipboardContentType? { didSet { refreshFiltered() } }
     @Published private(set) var filteredEntries: [ClipboardEntry] = []
+    @Published var isPanelVisible: Bool = false
 
     private let store: ClipboardStore
     private let monitor: ClipboardMonitorService
@@ -135,6 +136,16 @@ final class ClipboardHistoryController: ObservableObject {
                     || (entry.sourceAppName?.lowercased().contains(q) ?? false)
             }
         }
+        
+        result.sort { lhs, rhs in
+            if lhs.isPinned != rhs.isPinned {
+                return lhs.isPinned
+            }
+            let lhsDate = lhs.lastUsedAt ?? lhs.createdAt
+            let rhsDate = rhs.lastUsedAt ?? rhs.createdAt
+            return lhsDate > rhsDate
+        }
+        
         filteredEntries = result
     }
 

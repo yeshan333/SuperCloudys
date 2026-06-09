@@ -3,6 +3,7 @@ import SwiftUI
 struct SearchBarView: View {
     @Binding var query: String
     @Binding var typeFilter: ClipboardContentType?
+    let isVisible: Bool
     let onDismiss: () -> Void
     @FocusState private var isSearchFocused: Bool
 
@@ -30,7 +31,18 @@ struct SearchBarView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .onAppear { isSearchFocused = true }
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                isSearchFocused = true
+            }
+        }
+        .onChange(of: isVisible) { visible in
+            if visible {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    isSearchFocused = true
+                }
+            }
+        }
     }
 }
 

@@ -11,6 +11,7 @@ struct ClipboardHistoryView: View {
             SearchBarView(
                 query: $controller.searchQuery,
                 typeFilter: $controller.typeFilter,
+                isVisible: controller.isPanelVisible,
                 onDismiss: onDismiss
             )
             Divider()

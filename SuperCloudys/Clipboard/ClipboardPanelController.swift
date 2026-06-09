@@ -31,9 +31,12 @@ final class ClipboardPanelController {
         panel.center()
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        
+        historyController.isPanelVisible = true
     }
 
     func hide() {
+        historyController.isPanelVisible = false
         panel?.orderOut(nil)
         NSApp.setActivationPolicy(.accessory)
     }

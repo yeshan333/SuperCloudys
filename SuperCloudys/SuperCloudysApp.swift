@@ -10,6 +10,10 @@ struct SuperCloudysApp: App {
         guard !Self.isRunningTests else { return }
         ClipboardHistoryController.shared.startMonitoring()
         ClipboardHotkeyManager.shared.register()
+        
+        DispatchQueue.main.async {
+            AccessibilityActivator.requestTrust()
+        }
     }
 
     private static var isRunningTests: Bool {
