@@ -26,6 +26,7 @@ struct DetailPanelView: View {
                     .padding(16)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
             }
+            .id(entry.id)
         } else {
             Text("No selection")
                 .foregroundColor(.secondary)
@@ -56,37 +57,49 @@ struct DetailPanelView: View {
                     .foregroundColor(.secondary)
             }
         default:
-            Text(entry.plainText ?? entry.title)
+            let text = entry.plainText ?? entry.title
+            let limit = 400
+            let previewText = text.count > limit ? String(text.prefix(limit)) + "\n\n... (\(text.count) chars, truncated for preview)" : text
+            Text(previewText)
                 .font(.system(size: 13, design: .monospaced))
-                .textSelection(.enabled)
+                .foregroundColor(.primary.opacity(0.8))
         }
     }
 
     @ViewBuilder
     private var informationPanel: some View {
         if let entry {
-            VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 8) {
                 Text("Information")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(.secondary)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 10)
-                    .padding(.bottom, 6)
+                    .padding(.horizontal, 4)
 
-                Divider().padding(.horizontal, 16)
-
-                InfoRow(label: "Source", value: entry.sourceAppName ?? "Unknown")
-                InfoRow(label: "Content type", value: entry.contentType.displayName)
-
-                if let count = entry.characterCount {
-                    InfoRow(label: "Characters", value: "\(count)")
+                VStack(spacing: 0) {
+                    InfoRow(label: "Source", value: entry.sourceAppName ?? "Unknown")
+                    Divider().padding(.leading, 12)
+                    InfoRow(label: "Content type", value: entry.contentType.displayName)
+                    
+                    if let count = entry.characterCount {
+                        Divider().padding(.leading, 12)
+                        InfoRow(label: "Characters", value: "\(count)")
+                    }
+                    if let words = entry.wordCount {
+                        Divider().padding(.leading, 12)
+                        InfoRow(label: "Words", value: "\(words)")
+                    }
+                    Divider().padding(.leading, 12)
+                    InfoRow(label: "Copied at", value: formatDate(entry.createdAt))
                 }
-                if let words = entry.wordCount {
-                    InfoRow(label: "Words", value: "\(words)")
-                }
-                InfoRow(label: "Copied at", value: formatDate(entry.createdAt))
+                .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
+                )
             }
-            .padding(.bottom, 8)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
         }
     }
 

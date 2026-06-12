@@ -14,6 +14,21 @@ enum AccessibilityActivator {
         return AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
     }
 
+    /// 仅在未授权且距上次提示超过 7 天时弹窗，避免每次启动都打扰用户
+    static func promptTrustIfNeeded() {
+        guard !isTrusted else { return }
+
+        let cooldownKey = "lastAccessibilityPromptDate"
+        let defaults = UserDefaults.standard
+        if let lastPrompt = defaults.object(forKey: cooldownKey) as? Date,
+           Date().timeIntervalSince(lastPrompt) < 7 * 24 * 3600 {
+            return
+        }
+
+        defaults.set(Date(), forKey: cooldownKey)
+        requestTrust()
+    }
+
     /// Sets the target app as frontmost via AXUIElement. Returns true on success.
     static func activate(pid: pid_t) -> Bool {
         guard AXIsProcessTrusted() else { return false }

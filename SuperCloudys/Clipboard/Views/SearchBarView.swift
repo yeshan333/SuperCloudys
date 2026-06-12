@@ -10,15 +10,27 @@ struct SearchBarView: View {
     var body: some View {
         HStack(spacing: 12) {
             Button(action: onDismiss) {
-                Image(systemName: "arrow.left")
+                Image(systemName: "arrow.left.circle.fill")
+                    .font(.system(size: 24))
+                    .symbolRenderingMode(.hierarchical)
                     .foregroundColor(.secondary)
             }
             .buttonStyle(.plain)
 
-            TextField("Type to filter entries...", text: $query)
-                .textFieldStyle(.plain)
-                .font(.system(size: 14))
-                .focused($isSearchFocused)
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.secondary)
+
+                TextField("Search clipboard...", text: $query)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 18, weight: .regular))
+                    .focused($isSearchFocused)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color.secondary.opacity(0.1))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
             Picker("", selection: $typeFilter) {
                 Text("All Types").tag(nil as ClipboardContentType?)
@@ -28,9 +40,10 @@ struct SearchBarView: View {
             }
             .pickerStyle(.menu)
             .frame(width: 120)
+            .padding(.leading, 4)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
         .onAppear {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 isSearchFocused = true

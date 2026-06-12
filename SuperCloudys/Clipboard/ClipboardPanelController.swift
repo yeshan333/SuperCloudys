@@ -50,8 +50,8 @@ final class ClipboardPanelController {
         let hostingView = NSHostingView(rootView: contentView)
 
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 780, height: 540),
-            styleMask: [.titled, .closable, .fullSizeContentView],
+            contentRect: NSRect(x: 0, y: 0, width: 800, height: 560),
+            styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
@@ -69,12 +69,14 @@ final class ClipboardPanelController {
 
         let visualEffect = NSVisualEffectView(frame: panel.contentView!.bounds)
         visualEffect.autoresizingMask = [.width, .height]
-        visualEffect.material = .hudWindow
+        visualEffect.material = .popover
         visualEffect.blendingMode = .behindWindow
         visualEffect.state = .active
         visualEffect.wantsLayer = true
-        visualEffect.layer?.cornerRadius = 12
+        visualEffect.layer?.cornerRadius = 20
         visualEffect.layer?.masksToBounds = true
+        visualEffect.layer?.borderWidth = 1
+        visualEffect.layer?.borderColor = NSColor.white.withAlphaComponent(0.1).cgColor
 
         panel.contentView?.addSubview(visualEffect)
         hostingView.frame = panel.contentView!.bounds

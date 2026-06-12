@@ -5,6 +5,7 @@ struct ClipboardHistoryView: View {
     let onDismiss: () -> Void
 
     @State private var selectedID: UUID?
+    @State private var returnKeyMonitor: Any?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -14,7 +15,11 @@ struct ClipboardHistoryView: View {
                 isVisible: controller.isPanelVisible,
                 onDismiss: onDismiss
             )
-            Divider()
+            
+            Rectangle()
+                .fill(Color.secondary.opacity(0.1))
+                .frame(height: 1)
+            
             HSplitView {
                 EntryListView(
                     entries: controller.filteredEntries,
@@ -31,8 +36,13 @@ struct ClipboardHistoryView: View {
                     onPaste: { pasteSelected() },
                     onCopy: { copySelected() }
                 )
+                .background(Color(NSColor.controlBackgroundColor).opacity(0.4))
             }
-            Divider()
+            
+            Rectangle()
+                .fill(Color.secondary.opacity(0.1))
+                .frame(height: 1)
+                
             BottomBarView(
                 appName: selectedEntry?.sourceAppName,
                 onPaste: { pasteSelected() },
@@ -41,19 +51,26 @@ struct ClipboardHistoryView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.clear)
-        .onAppear { selectFirst() }
+        .onAppear {
+            selectFirst()
+            installReturnKeyMonitor()
+        }
+        .onDisappear { removeReturnKeyMonitor() }
+        .onChange(of: controller.isPanelVisible) { visible in
+            if visible { selectedID = controller.filteredEntries.first?.id }
+        }
         .onChange(of: controller.filteredEntries) { _ in selectFirst() }
         .onExitCommand { onDismiss() }
         .onKeyPress(.upArrow) {
-            moveSelection(by: -1)
+            withAnimation(.interactiveSpring(response: 0.25, dampingFraction: 0.8, blendDuration: 0.1)) {
+                moveSelection(by: -1)
+            }
             return .handled
         }
         .onKeyPress(.downArrow) {
-            moveSelection(by: 1)
-            return .handled
-        }
-        .onKeyPress(.return) {
-            pasteSelected()
+            withAnimation(.interactiveSpring(response: 0.25, dampingFraction: 0.8, blendDuration: 0.1)) {
+                moveSelection(by: 1)
+            }
             return .handled
         }
     }
@@ -101,5 +118,26 @@ struct ClipboardHistoryView: View {
     private func copySelected() {
         guard let entry = selectedEntry else { return }
         controller.copyToClipboard(entry)
+    }
+
+    // MARK: - IME-aware Return key handling
+
+    private func installReturnKeyMonitor() {
+        returnKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.keyCode == 36 else { return event }
+            if let textView = NSApp.keyWindow?.firstResponder as? NSTextView,
+               textView.hasMarkedText() {
+                return event
+            }
+            pasteSelected()
+            return nil
+        }
+    }
+
+    private func removeReturnKeyMonitor() {
+        if let monitor = returnKeyMonitor {
+            NSEvent.removeMonitor(monitor)
+            returnKeyMonitor = nil
+        }
     }
 }

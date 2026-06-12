@@ -12,7 +12,7 @@ struct SuperCloudysApp: App {
         ClipboardHotkeyManager.shared.register()
         
         DispatchQueue.main.async {
-            AccessibilityActivator.requestTrust()
+            AccessibilityActivator.promptTrustIfNeeded()
         }
     }
 
