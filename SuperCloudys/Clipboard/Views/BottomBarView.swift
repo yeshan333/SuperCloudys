@@ -3,7 +3,8 @@ import SwiftUI
 struct BottomBarView: View {
     let appName: String?
     let onPaste: () -> Void
-    let onActions: () -> Void
+    let onClearUnpinned: () -> Void
+    let onClearAll: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
@@ -37,12 +38,19 @@ struct BottomBarView: View {
                 .fill(Color.secondary.opacity(0.2))
                 .frame(width: 1, height: 16)
 
-            Button(action: onActions) {
+            Menu {
+                Button("清理未固定历史") {
+                    onClearUnpinned()
+                }
+                Button("清空所有历史", role: .destructive) {
+                    onClearAll()
+                }
+            } label: {
                 HStack(spacing: 4) {
                     Text("Actions")
                         .font(.system(size: 12, weight: .medium))
-                    Text("⌃H")
-                        .font(.system(size: 10, weight: .semibold))
+                    Image(systemName: "chevron.up")
+                        .font(.system(size: 8))
                         .foregroundColor(.secondary)
                 }
                 .padding(.horizontal, 10)
@@ -50,7 +58,8 @@ struct BottomBarView: View {
                 .background(Color.secondary.opacity(0.1))
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             }
-            .buttonStyle(.plain)
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)

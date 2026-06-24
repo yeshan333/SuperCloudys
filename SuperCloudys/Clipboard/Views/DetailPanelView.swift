@@ -100,6 +100,26 @@ struct DetailPanelView: View {
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 16)
+
+            HStack(spacing: 8) {
+                Button(action: onPaste) {
+                    Label(NSLocalizedString("Paste", comment: ""), systemImage: "arrow.up.doc")
+                        .font(.system(size: 12, weight: .medium))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+
+                Button(action: onCopy) {
+                    Label(NSLocalizedString("Copy", comment: ""), systemImage: "doc.on.doc")
+                        .font(.system(size: 12, weight: .medium))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
         }
     }
 

@@ -27,10 +27,9 @@ final class ClipboardPanelController {
         }
         guard let panel else { return }
 
-        NSApp.setActivationPolicy(.regular)
-        panel.center()
+        let mouseLoc = NSEvent.mouseLocation
+        panel.setFrameTopLeftPoint(mouseLoc)
         panel.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
         
         historyController.isPanelVisible = true
     }
@@ -38,7 +37,6 @@ final class ClipboardPanelController {
     func hide() {
         historyController.isPanelVisible = false
         panel?.orderOut(nil)
-        NSApp.setActivationPolicy(.accessory)
     }
 
     // MARK: - Private
@@ -82,6 +80,14 @@ final class ClipboardPanelController {
         hostingView.frame = panel.contentView!.bounds
         hostingView.autoresizingMask = [.width, .height]
         panel.contentView?.addSubview(hostingView)
+
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didResignKeyNotification,
+            object: panel,
+            queue: .main
+        ) { [weak self] _ in
+            self?.hide()
+        }
 
         self.panel = panel
     }

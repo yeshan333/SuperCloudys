@@ -6,6 +6,7 @@ struct ClipboardHistoryView: View {
 
     @State private var selectedID: UUID?
     @State private var returnKeyMonitor: Any?
+    @State private var copyToast: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -24,9 +25,16 @@ struct ClipboardHistoryView: View {
                 EntryListView(
                     entries: controller.filteredEntries,
                     selectedID: $selectedID,
+                    searchQuery: controller.searchQuery,
                     onDoubleClick: { id in
                         selectedID = id
                         pasteEntry(id: id)
+                    },
+                    onTogglePin: { id in
+                        controller.togglePin(id: id)
+                    },
+                    onDelete: { id in
+                        controller.delete(id: id)
                     }
                 )
                 .frame(minWidth: 280, maxWidth: 320)
@@ -46,7 +54,8 @@ struct ClipboardHistoryView: View {
             BottomBarView(
                 appName: selectedEntry?.sourceAppName,
                 onPaste: { pasteSelected() },
-                onActions: {}
+                onClearUnpinned: { controller.clearUnpinned() },
+                onClearAll: { controller.clearAll() }
             )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -73,6 +82,19 @@ struct ClipboardHistoryView: View {
             }
             return .handled
         }
+        .overlay(alignment: .bottom) {
+            if let toast = copyToast {
+                Text(toast)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Capsule().fill(Color.black.opacity(0.75)))
+                    .padding(.bottom, 48)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.easeOut(duration: 0.25), value: copyToast)
     }
 
     private var selectedEntry: ClipboardEntry? {
@@ -98,9 +120,7 @@ struct ClipboardHistoryView: View {
 
     private func pasteEntry(entry: ClipboardEntry) {
         onDismiss()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            controller.pasteToFrontApp(entry)
-        }
+        controller.pasteToFrontApp(entry)
     }
 
     private func moveSelection(by offset: Int) {
@@ -118,6 +138,10 @@ struct ClipboardHistoryView: View {
     private func copySelected() {
         guard let entry = selectedEntry else { return }
         controller.copyToClipboard(entry)
+        copyToast = NSLocalizedString("Copied to clipboard", comment: "")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            copyToast = nil
+        }
     }
 
     // MARK: - IME-aware Return key handling

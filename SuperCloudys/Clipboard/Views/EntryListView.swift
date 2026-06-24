@@ -3,7 +3,10 @@ import SwiftUI
 struct EntryListView: View {
     let entries: [ClipboardEntry]
     @Binding var selectedID: UUID?
+    var searchQuery: String = ""
     var onDoubleClick: ((UUID) -> Void)?
+    var onTogglePin: ((UUID) -> Void)?
+    var onDelete: ((UUID) -> Void)?
     @Namespace private var animation
 
     var body: some View {
@@ -26,6 +29,14 @@ struct EntryListView: View {
                                         selectedID = entry.id
                                     }
                                 }
+                                .contextMenu {
+                                    Button(entry.isPinned ? "取消固定" : "固定") {
+                                        onTogglePin?(entry.id)
+                                    }
+                                    Button("删除", role: .destructive) {
+                                        onDelete?(entry.id)
+                                    }
+                                }
                             }
                         }
                     }
@@ -34,6 +45,20 @@ struct EntryListView: View {
                 .padding(.vertical, 8)
             }
             .background(Color.clear)
+            .overlay {
+                if entries.isEmpty {
+                    VStack(spacing: 8) {
+                        Image(systemName: "doc.on.clipboard")
+                            .font(.system(size: 32))
+                            .foregroundColor(.secondary.opacity(0.4))
+                        Text(searchQuery.isEmpty
+                             ? NSLocalizedString("Clipboard is empty", comment: "")
+                             : NSLocalizedString("No results for \"\(searchQuery)\"", comment: ""))
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary.opacity(0.6))
+                    }
+                }
+            }
             .onChange(of: selectedID) { id in
                 if let id {
                     withAnimation(.easeOut(duration: 0.15)) {
