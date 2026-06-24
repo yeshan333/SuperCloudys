@@ -37,7 +37,7 @@ CONF
   openssl req -x509 -newkey rsa:2048 -days 3650 -nodes \
     -keyout "$tmp/key.pem" -out "$tmp/cert.pem" -config "$tmp/cert.conf"
   # `-legacy` keeps the older KDF macOS `security` can import.
-  openssl pkcs12 -export -out "$tmp/cert.p12" \
+  openssl pkcs12 -export -legacy -out "$tmp/cert.p12" \
     -inkey "$tmp/key.pem" -in "$tmp/cert.pem" -passout pass:local
   security import "$tmp/cert.p12" -k login.keychain-db -P local \
     -T /usr/bin/codesign -T /usr/bin/security
