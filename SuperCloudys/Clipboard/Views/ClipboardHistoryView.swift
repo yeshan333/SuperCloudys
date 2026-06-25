@@ -120,6 +120,7 @@ struct ClipboardHistoryView: View {
 
     private func pasteEntry(entry: ClipboardEntry) {
         onDismiss()
+        controller.clearSearch()
         controller.pasteToFrontApp(entry)
     }
 
@@ -138,6 +139,7 @@ struct ClipboardHistoryView: View {
     private func copySelected() {
         guard let entry = selectedEntry else { return }
         controller.copyToClipboard(entry)
+        controller.clearSearch()
         copyToast = NSLocalizedString("Copied to clipboard", comment: "")
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             copyToast = nil

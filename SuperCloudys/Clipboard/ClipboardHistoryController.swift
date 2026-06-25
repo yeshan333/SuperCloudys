@@ -70,6 +70,14 @@ final class ClipboardHistoryController: ObservableObject {
         reloadEntries()
     }
 
+    func clearSearch() {
+        guard !searchQuery.isEmpty else { return }
+        searchQuery = ""
+        filterTask?.cancel()
+        filterTask = nil
+        refreshFiltered()
+    }
+
     func copyToClipboard(_ entry: ClipboardEntry) {
         monitor.markSelfWrite()
         let pasteboard = NSPasteboard.general
