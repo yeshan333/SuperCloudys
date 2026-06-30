@@ -3,21 +3,23 @@ import SwiftUI
 struct BottomBarView: View {
     let appName: String?
     let onPaste: () -> Void
+    let onCopy: () -> Void
     let onClearUnpinned: () -> Void
     let onClearAll: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            HStack(spacing: 6) {
-                Image(systemName: "doc.on.clipboard.fill")
-                    .foregroundColor(.accentColor)
-                    .font(.system(size: 14))
-                Text("Clipboard History")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.secondary)
-            }
-
+        HStack(spacing: 8) {
             Spacer()
+
+            Button(action: onCopy) {
+                Label("复制", systemImage: "doc.on.doc")
+                    .font(.system(size: 12, weight: .medium))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.secondary.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            }
+            .buttonStyle(.plain)
 
             Button(action: onPaste) {
                 HStack(spacing: 6) {
@@ -25,11 +27,12 @@ struct BottomBarView: View {
                         .font(.system(size: 12, weight: .medium))
                     Image(systemName: "return")
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.white.opacity(0.8))
                 }
                 .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(Color.secondary.opacity(0.1))
+                .padding(.vertical, 5)
+                .foregroundColor(.white)
+                .background(Color.accentColor)
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             }
             .buttonStyle(.plain)
@@ -47,29 +50,29 @@ struct BottomBarView: View {
                 }
             } label: {
                 HStack(spacing: 4) {
-                    Text("Actions")
+                    Text("更多")
                         .font(.system(size: 12, weight: .medium))
                     Image(systemName: "chevron.up")
                         .font(.system(size: 8))
                         .foregroundColor(.secondary)
                 }
                 .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(Color.secondary.opacity(0.1))
+                .padding(.vertical, 5)
+                .background(Color.secondary.opacity(0.08))
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
         }
         .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .background(Color(NSColor.windowBackgroundColor).opacity(0.3))
+        .padding(.vertical, 10)
+        .background(Color(NSColor.windowBackgroundColor).opacity(0.22))
     }
 
     private var pasteLabel: String {
         if let name = appName {
-            return "Paste to \(name)"
+            return "粘贴到 \(name)"
         }
-        return "Paste"
+        return "粘贴"
     }
 }

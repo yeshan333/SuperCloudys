@@ -5,7 +5,7 @@ struct ClipboardHistoryView: View {
     let onDismiss: () -> Void
 
     @State private var selectedID: UUID?
-    @State private var returnKeyMonitor: Any?
+    @State private var keyboardMonitor: Any?
     @State private var copyToast: String?
 
     var body: some View {
@@ -40,9 +40,7 @@ struct ClipboardHistoryView: View {
                 .frame(minWidth: 280, maxWidth: 320)
 
                 DetailPanelView(
-                    entry: selectedEntry,
-                    onPaste: { pasteSelected() },
-                    onCopy: { copySelected() }
+                    entry: selectedEntry
                 )
                 .background(Color(NSColor.controlBackgroundColor).opacity(0.4))
             }
@@ -54,6 +52,7 @@ struct ClipboardHistoryView: View {
             BottomBarView(
                 appName: selectedEntry?.sourceAppName,
                 onPaste: { pasteSelected() },
+                onCopy: { copySelected() },
                 onClearUnpinned: { controller.clearUnpinned() },
                 onClearAll: { controller.clearAll() }
             )
@@ -62,9 +61,9 @@ struct ClipboardHistoryView: View {
         .background(.clear)
         .onAppear {
             selectFirst()
-            installReturnKeyMonitor()
+            installKeyboardMonitor()
         }
-        .onDisappear { removeReturnKeyMonitor() }
+        .onDisappear { removeKeyboardMonitor() }
         .onChange(of: controller.isPanelVisible) { visible in
             if visible { selectedID = controller.filteredEntries.first?.id }
         }
@@ -140,30 +139,41 @@ struct ClipboardHistoryView: View {
         guard let entry = selectedEntry else { return }
         controller.copyToClipboard(entry)
         controller.clearSearch()
-        copyToast = NSLocalizedString("Copied to clipboard", comment: "")
+        copyToast = NSLocalizedString("已复制到剪切板", comment: "")
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             copyToast = nil
         }
     }
 
-    // MARK: - IME-aware Return key handling
+    // MARK: - Keyboard handling
 
-    private func installReturnKeyMonitor() {
-        returnKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            guard event.keyCode == 36 else { return event }
+    private func installKeyboardMonitor() {
+        guard keyboardMonitor == nil else { return }
+        keyboardMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard controller.isPanelVisible else { return event }
+
             if let textView = NSApp.keyWindow?.firstResponder as? NSTextView,
                textView.hasMarkedText() {
                 return event
             }
-            pasteSelected()
-            return nil
+
+            switch event.keyCode {
+            case 36:
+                pasteSelected()
+                return nil
+            case 48:
+                controller.cycleTypeFilter(reverse: event.modifierFlags.contains(.shift))
+                return nil
+            default:
+                return event
+            }
         }
     }
 
-    private func removeReturnKeyMonitor() {
-        if let monitor = returnKeyMonitor {
+    private func removeKeyboardMonitor() {
+        if let monitor = keyboardMonitor {
             NSEvent.removeMonitor(monitor)
-            returnKeyMonitor = nil
+            keyboardMonitor = nil
         }
     }
 }

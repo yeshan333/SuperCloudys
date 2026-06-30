@@ -78,6 +78,18 @@ final class ClipboardHistoryController: ObservableObject {
         refreshFiltered()
     }
 
+    func cycleTypeFilter(reverse: Bool = false) {
+        let filters = [nil] + ClipboardContentType.allCases.map(Optional.some)
+        guard let currentIndex = filters.firstIndex(where: { $0 == typeFilter }) else {
+            typeFilter = nil
+            return
+        }
+        let nextIndex = reverse
+            ? (currentIndex == filters.startIndex ? filters.endIndex - 1 : currentIndex - 1)
+            : (currentIndex + 1) % filters.count
+        typeFilter = filters[nextIndex]
+    }
+
     func copyToClipboard(_ entry: ClipboardEntry) {
         monitor.markSelfWrite()
         let pasteboard = NSPasteboard.general

@@ -162,8 +162,13 @@ final class ClipboardMonitorService {
         // Try text (richText check via RTF presence)
         if let text = pasteboard.string(forType: .string), !text.isEmpty {
             let hasRTF = pasteboard.data(forType: .rtf) != nil
-            let type: ClipboardContentType = hasRTF ? .richText : .text
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let type: ClipboardContentType
+            if !hasRTF, detectedWebURL(in: trimmed) != nil {
+                type = .url
+            } else {
+                type = hasRTF ? .richText : .text
+            }
             let title = String(trimmed.prefix(100))
             return makeEntry(
                 type: type,
@@ -175,6 +180,21 @@ final class ClipboardMonitorService {
         }
 
         return nil
+    }
+
+    func detectedWebURL(in text: String) -> URL? {
+        guard !text.isEmpty else { return nil }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue),
+              let match = detector.firstMatch(in: text, options: [], range: range),
+              match.range == range,
+              let url = match.url,
+              !url.isFileURL,
+              let scheme = url.scheme?.lowercased(),
+              ["http", "https", "ftp", "ftps", "mailto", "ws", "wss"].contains(scheme) else {
+            return nil
+        }
+        return url
     }
 
     private func makeEntry(

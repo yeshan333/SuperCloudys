@@ -3,18 +3,18 @@ import AppKit
 
 struct DetailPanelView: View {
     let entry: ClipboardEntry?
-    let onPaste: () -> Void
-    let onCopy: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
             contentPreview
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
-            Divider()
+            if entry != nil {
+                Divider()
 
-            informationPanel
-                .frame(maxWidth: .infinity)
+                informationPanel
+                    .frame(maxWidth: .infinity)
+            }
         }
     }
 
@@ -28,7 +28,7 @@ struct DetailPanelView: View {
             }
             .id(entry.id)
         } else {
-            Text("No selection")
+            Text("未选择")
                 .foregroundColor(.secondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -59,7 +59,7 @@ struct DetailPanelView: View {
         default:
             let text = entry.plainText ?? entry.title
             let limit = 400
-            let previewText = text.count > limit ? String(text.prefix(limit)) + "\n\n... (\(text.count) chars, truncated for preview)" : text
+            let previewText = text.count > limit ? String(text.prefix(limit)) + "\n\n...（共 \(text.count) 字，预览已截断）" : text
             Text(previewText)
                 .font(.system(size: 13, design: .monospaced))
                 .foregroundColor(.primary.opacity(0.8))
@@ -69,89 +69,55 @@ struct DetailPanelView: View {
     @ViewBuilder
     private var informationPanel: some View {
         if let entry {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Information")
-                    .font(.system(size: 11, weight: .semibold))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(primaryMetadata(for: entry))
+                    .font(.system(size: 11))
                     .foregroundColor(.secondary)
-                    .padding(.horizontal, 4)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
 
-                VStack(spacing: 0) {
-                    InfoRow(label: "Source", value: entry.sourceAppName ?? "Unknown")
-                    Divider().padding(.leading, 12)
-                    InfoRow(label: "Content type", value: entry.contentType.displayName)
-                    
-                    if let count = entry.characterCount {
-                        Divider().padding(.leading, 12)
-                        InfoRow(label: "Characters", value: "\(count)")
-                    }
-                    if let words = entry.wordCount {
-                        Divider().padding(.leading, 12)
-                        InfoRow(label: "Words", value: "\(words)")
-                    }
-                    Divider().padding(.leading, 12)
-                    InfoRow(label: "Copied at", value: formatDate(entry.createdAt))
+                if let stats = statsMetadata(for: entry) {
+                    Text(stats)
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary.opacity(0.8))
+                        .lineLimit(1)
                 }
-                .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
-                )
             }
             .padding(.horizontal, 16)
-            .padding(.bottom, 16)
-
-            HStack(spacing: 8) {
-                Button(action: onPaste) {
-                    Label(NSLocalizedString("Paste", comment: ""), systemImage: "arrow.up.doc")
-                        .font(.system(size: 12, weight: .medium))
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-
-                Button(action: onCopy) {
-                    Label(NSLocalizedString("Copy", comment: ""), systemImage: "doc.on.doc")
-                        .font(.system(size: 12, weight: .medium))
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-            }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 12)
+            .padding(.vertical, 10)
         }
+    }
+
+    private func primaryMetadata(for entry: ClipboardEntry) -> String {
+        [
+            entry.sourceAppName ?? "未知来源",
+            entry.contentType.displayName,
+            formatDate(entry.createdAt)
+        ].joined(separator: " · ")
+    }
+
+    private func statsMetadata(for entry: ClipboardEntry) -> String? {
+        var parts: [String] = []
+        if let count = entry.characterCount {
+            parts.append("\(count) 字符")
+        }
+        if let words = entry.wordCount {
+            parts.append("\(words) 词")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private func formatDate(_ date: Date) -> String {
         let calendar = Calendar.current
         let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
         formatter.timeStyle = .short
         let time = formatter.string(from: date)
 
-        if calendar.isDateInToday(date) { return "Today at \(time)" }
-        if calendar.isDateInYesterday(date) { return "Yesterday at \(time)" }
+        if calendar.isDateInToday(date) { return "今天 \(time)" }
+        if calendar.isDateInYesterday(date) { return "昨天 \(time)" }
         formatter.dateStyle = .medium
         return formatter.string(from: date)
-    }
-}
-
-private struct InfoRow: View {
-    let label: String
-    let value: String
-
-    var body: some View {
-        HStack {
-            Text(label)
-                .font(.system(size: 12))
-                .foregroundColor(.secondary)
-            Spacer()
-            Text(value)
-                .font(.system(size: 12))
-                .foregroundColor(.primary)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 4)
     }
 }
 

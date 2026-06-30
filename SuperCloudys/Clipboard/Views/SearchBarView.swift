@@ -10,8 +10,8 @@ struct SearchBarView: View {
     var body: some View {
         HStack(spacing: 12) {
             Button(action: onDismiss) {
-                Image(systemName: "arrow.left.circle.fill")
-                    .font(.system(size: 24))
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 20))
                     .symbolRenderingMode(.hierarchical)
                     .foregroundColor(.secondary)
             }
@@ -22,7 +22,7 @@ struct SearchBarView: View {
                     .font(.system(size: 16, weight: .medium))
                     .foregroundColor(.secondary)
 
-                TextField("Search clipboard...", text: $query)
+                TextField("搜索剪切板...", text: $query)
                     .textFieldStyle(.plain)
                     .font(.system(size: 18, weight: .regular))
                     .focused($isSearchFocused)
@@ -33,7 +33,7 @@ struct SearchBarView: View {
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
             Picker("", selection: $typeFilter) {
-                Text("All Types").tag(nil as ClipboardContentType?)
+                Text("全部类型").tag(nil as ClipboardContentType?)
                 ForEach(ClipboardContentType.allCases, id: \.self) { type in
                     Text(type.displayName).tag(type as ClipboardContentType?)
                 }
@@ -62,13 +62,13 @@ struct SearchBarView: View {
 extension ClipboardContentType {
     var displayName: String {
         switch self {
-        case .text: return "Text"
-        case .richText: return "Rich Text"
-        case .url: return "URL"
-        case .fileGroup: return "Files"
-        case .image: return "Image"
-        case .color: return "Color"
-        case .unknown: return "Other"
+        case .text: return "文本"
+        case .richText: return "富文本"
+        case .url: return "链接"
+        case .fileGroup: return "文件"
+        case .image: return "图片"
+        case .color: return "颜色"
+        case .unknown: return "其他"
         }
     }
 
