@@ -50,7 +50,7 @@ struct MenuBarView: View {
             Button("打开剪贴板历史") {
                 ClipboardPanelController.shared.show()
             }
-            .keyboardShortcut("v", modifiers: [.command, .shift])
+            .keyboardShortcut("h", modifiers: [.control])
 
             Toggle("暂停记录", isOn: Binding(
                 get: { clipboard.isMonitoringPaused },
@@ -59,7 +59,7 @@ struct MenuBarView: View {
 
             if let error = clipboardHotkey.registrationError {
                 Text(error).foregroundStyle(.red)
-                Button("重试 Cmd+Shift+V") {
+                Button("重试 Ctrl+H") {
                     clipboardHotkey.unregister()
                     clipboardHotkey.register()
                 }

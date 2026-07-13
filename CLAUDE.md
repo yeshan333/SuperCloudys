@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-SuperCloudys (formerly RMenu) is a macOS desktop productivity app: Finder right-click menu enhancement + optional Dock global shortcuts (Cmd+1~0) + clipboard history (Cmd+Shift+V) + menu bar management. Requires macOS 14.0+, Swift 5.9, Xcode 15+.
+SuperCloudys (formerly RMenu) is a macOS desktop productivity app: Finder right-click menu enhancement + optional Dock global shortcuts (Cmd+1~0) + clipboard history (Ctrl+H) + menu bar management. Requires macOS 14.0+, Swift 5.9, Xcode 15+.
 
 ## Build & Run
 
@@ -46,7 +46,7 @@ The project has **three targets** defined in `project.yml` (XcodeGen):
 ### SuperCloudys (main app, unsandboxed)
 Menu bar-only app (`MenuBarExtra`) — no main window. Subsystems:
 - **Dock/** — Global Cmd+1~0 shortcuts via Carbon `RegisterEventHotKey`. `DockMonitor` watches the Dock plist via `DispatchSourceFileSystemObject` (not polling). `DockAppLauncher` handles activate/hide toggle with AXUIElement window cycling. `AccessibilityActivator` bypasses macOS 14+ focus protection.
-- **Clipboard/** — Clipboard history with Cmd+Shift+V floating panel. `ClipboardMonitorService` polls `NSPasteboard` on a background GCD timer. `ClipboardStore` persists entries to disk (JSON + images). `ClipboardPanelController` manages the NSPanel. Views are in `Clipboard/Views/`.
+- **Clipboard/** — Clipboard history with Ctrl+H floating panel. `ClipboardMonitorService` polls `NSPasteboard` on a background GCD timer. `ClipboardStore` persists entries to disk (JSON + images). `ClipboardPanelController` manages the NSPanel. Views are in `Clipboard/Views/`.
 - **Services/** — `AppIconCache` (async icon loading), `ExtensionStatus` (on-demand Finder extension state), `LoginItemManager` (`SMAppService`).
 - **MenuBar/** — SwiftUI views for the menu bar dropdown.
 

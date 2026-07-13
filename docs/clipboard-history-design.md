@@ -95,7 +95,7 @@ Raycast 强调快捷键驱动：
 - Return 粘贴或复制
 - 键盘操作支持置顶、重命名、删除、批量删除、类型过滤
 
-核心要求是：剪贴板历史只有在调用和选择都低摩擦时才有用。SuperCloudys 已使用 Carbon 快捷键，新功能使用 `Cmd+Shift+V` 作为全局快捷键，集成到同一全局快捷键注册模型中。
+核心要求是：剪贴板历史只有在调用和选择都低摩擦时才有用。SuperCloudys 已使用 Carbon 快捷键，新功能使用 `Ctrl+H` 作为全局快捷键，集成到同一全局快捷键注册模型中。
 
 ### 从历史粘贴
 
@@ -317,7 +317,7 @@ SuperCloudys/Clipboard/
 ├── ClipboardStore.swift              # JSON 持久化（防抖写入）
 ├── ClipboardHistoryController.swift  # 业务协调（@MainActor）
 ├── ClipboardPanelController.swift    # NSPanel 管理
-├── ClipboardHotkeyManager.swift      # Carbon Cmd+Shift+V 全局快捷键
+├── ClipboardHotkeyManager.swift      # Carbon Ctrl+H 全局快捷键
 ├── ClipboardSettings.swift           # 设置/隐私配置
 └── Views/
     ├── ClipboardHistoryView.swift    # 主视图
@@ -444,7 +444,7 @@ final class ClipboardMonitorService {
 - `NSPanel` — 启动器风格的历史窗口
 - `NSVisualEffectView` — 背景毛玻璃模糊效果（深色半透明）
 - `NSHostingView` + SwiftUI 内容
-- 复用已有 Carbon 全局快捷键基础设施（`Cmd+Shift+V` 触发）
+- 复用已有 Carbon 全局快捷键基础设施（`Ctrl+H` 触发）
 
 面板特性：
 
@@ -616,9 +616,9 @@ final class ClipboardMonitorService {
 
 现有 `Cmd+1...0` 已用于 Dock 应用快捷键。剪贴板历史需要单独的调用快捷键。
 
-**全局快捷键：`Cmd+Shift+V`**
+**全局快捷键：`Ctrl+H`**
 
-- 按下 `Cmd+Shift+V` 打开/关闭剪贴板历史面板
+- 按下 `Ctrl+H` 打开/关闭剪贴板历史面板
 - 不与现有 `Cmd+1...0` 冲突
 - 简短易记，符合"History"语义
 - 避免与 macOS 系统快捷键 `Cmd+H`（隐藏窗口）冲突
@@ -792,7 +792,7 @@ final class ClipboardMonitorService {
 
 ### 推荐面板工作流
 
-1. `Cmd+Shift+V` 打开面板，记录当前前台应用
+1. `Ctrl+H` 打开面板，记录当前前台应用
 2. 搜索框自动获焦，可直接输入过滤
 3. 方向键上下移动选择，右侧实时更新预览和 Information
 4. `Return` 粘贴选中条目到之前的前台应用

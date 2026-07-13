@@ -23,10 +23,10 @@ final class ClipboardHotkeyManager: ObservableObject {
 
         let hotKeyID = EventHotKeyID(signature: Self.signature, id: Self.hotkeyID)
         var ref: EventHotKeyRef?
-        // Cmd+Shift+V avoids stealing Ctrl+H/backspace from terminals.
+        // kVK_ANSI_H = 0x04, controlKey modifier
         let status = RegisterEventHotKey(
-            UInt32(kVK_ANSI_V),
-            UInt32(cmdKey | shiftKey),
+            UInt32(kVK_ANSI_H),
+            UInt32(controlKey),
             hotKeyID,
             GetApplicationEventTarget(),
             0,
@@ -35,10 +35,10 @@ final class ClipboardHotkeyManager: ObservableObject {
         if status == noErr, let ref {
             hotKeyRef = ref
             registrationError = nil
-            log.info("Registered Cmd+Shift+V clipboard history hotkey")
+            log.info("Registered Ctrl+H clipboard history hotkey")
         } else {
-            registrationError = "Cmd+Shift+V 注册失败（\(status)），可能与其他应用冲突"
-            log.warning("Failed to register Cmd+Shift+V hotkey (status=\(status))")
+            registrationError = "Ctrl+H 注册失败（\(status)），可能与其他应用冲突"
+            log.warning("Failed to register Ctrl+H hotkey (status=\(status))")
         }
     }
 
