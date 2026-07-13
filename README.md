@@ -38,6 +38,10 @@
 - 查看和修改指定后缀的系统默认打开应用
 - 添加/移除 Finder 右键菜单中的自定义应用
 
+<p align="center">
+  <img src="screenshots/menubar.png" alt="SuperCloudys 设置界面" width="317">
+</p>
+
 ## 系统要求
 
 - macOS 14.0 Sonoma 或更高版本
