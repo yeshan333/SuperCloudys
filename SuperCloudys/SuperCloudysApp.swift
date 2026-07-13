@@ -2,21 +2,17 @@ import SwiftUI
 
 @main
 struct SuperCloudysApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var dockMonitor = DockMonitor()
     @StateObject private var loginItem = LoginItemManager()
 
     init() {
-        IconPrewarmer.prewarmInBackground()
         guard !Self.isRunningTests else { return }
         ClipboardHistoryController.shared.startMonitoring()
         ClipboardHotkeyManager.shared.register()
-        
-        DispatchQueue.main.async {
-            AccessibilityActivator.promptTrustIfNeeded()
-        }
     }
 
-    private static var isRunningTests: Bool {
+    fileprivate static var isRunningTests: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 
@@ -28,5 +24,13 @@ struct SuperCloudysApp: App {
         } label: {
             Label(AppConstants.appName, systemImage: "folder.badge.gearshape")
         }
+    }
+}
+
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillTerminate(_ notification: Notification) {
+        guard !SuperCloudysApp.isRunningTests else { return }
+        ClipboardHistoryController.shared.flush()
     }
 }

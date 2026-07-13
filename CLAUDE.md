@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-SuperCloudys (formerly RMenu) is a macOS desktop productivity app: Finder right-click menu enhancement + Dock global shortcuts (Cmd+1~0) + clipboard history (Ctrl+H) + menu bar management. Requires macOS 14.0+, Swift 5.9, Xcode 15+.
+SuperCloudys (formerly RMenu) is a macOS desktop productivity app: Finder right-click menu enhancement + optional Dock global shortcuts (Cmd+1~0) + clipboard history (Cmd+Shift+V) + menu bar management. Requires macOS 14.0+, Swift 5.9, Xcode 15+.
 
 ## Build & Run
 
@@ -46,12 +46,12 @@ The project has **three targets** defined in `project.yml` (XcodeGen):
 ### SuperCloudys (main app, unsandboxed)
 Menu bar-only app (`MenuBarExtra`) — no main window. Subsystems:
 - **Dock/** — Global Cmd+1~0 shortcuts via Carbon `RegisterEventHotKey`. `DockMonitor` watches the Dock plist via `DispatchSourceFileSystemObject` (not polling). `DockAppLauncher` handles activate/hide toggle with AXUIElement window cycling. `AccessibilityActivator` bypasses macOS 14+ focus protection.
-- **Clipboard/** — Clipboard history with Ctrl+H floating panel. `ClipboardMonitorService` polls `NSPasteboard` on a background GCD timer. `ClipboardStore` persists entries to disk (JSON + images). `ClipboardPanelController` manages the NSPanel. Views are in `Clipboard/Views/`.
-- **Services/** — `AppIconCache` (async icon loading), `ExtensionStatus` (Finder extension state), `LoginItemManager` (`SMAppService`), `IconPrewarmer`.
+- **Clipboard/** — Clipboard history with Cmd+Shift+V floating panel. `ClipboardMonitorService` polls `NSPasteboard` on a background GCD timer. `ClipboardStore` persists entries to disk (JSON + images). `ClipboardPanelController` manages the NSPanel. Views are in `Clipboard/Views/`.
+- **Services/** — `AppIconCache` (async icon loading), `ExtensionStatus` (on-demand Finder extension state), `LoginItemManager` (`SMAppService`).
 - **MenuBar/** — SwiftUI views for the menu bar dropdown.
 
 ### SuperCloudysExtension (Finder Sync extension, sandboxed)
-`FIFinderSync` subclass injecting right-click menu items. Uses `MenuSnapshot` pattern: background utility queue pre-builds menu data, `menu(for:)` on main thread only assembles NSMenu (< 0.5ms). Actions in `Actions/` subfolder.
+`FIFinderSync` subclass injecting right-click menu items. Uses an expiring `MenuSnapshot`: a utility queue resolves apps by Bundle ID and pre-builds icons, while `menu(for:)` only assembles `NSMenu`. Actions in `Actions/`.
 
 ### Shared/ (compiled into both targets)
 `Constants.swift` (bundle IDs, built-in `ExternalApp` list), `CustomAppStore.swift` (JSON persistence with mtime cache + NSLock), `DockShortcutSettings.swift`.
@@ -66,7 +66,7 @@ Menu bar-only app (`MenuBarExtra`) — no main window. Subsystems:
 
 ## CI/CD
 
-GitHub Actions (`.github/workflows/build.yml`): push a `v*` tag to trigger Release build + DMG creation + GitHub Release. Also supports manual dispatch.
+GitHub Actions (`.github/workflows/build.yml`): push a `v*` tag to run tests, inject version/build numbers, sign with Developer ID, notarize the DMG, and create a GitHub Release. Required credential names are documented in README.
 
 ## Scripts
 

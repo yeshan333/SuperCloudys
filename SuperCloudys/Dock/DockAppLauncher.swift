@@ -1,12 +1,16 @@
 import AppKit
 import os
 
+@MainActor
 enum DockAppLauncher {
 
-    private static let log = Logger(subsystem: "com.yeshan333.SuperCloudys", category: "DockLauncher")
+    nonisolated private static let log = Logger(
+        subsystem: "com.yeshan333.SuperCloudys", category: "DockLauncher"
+    )
 
     private static var cycleCount = 0
     private static var cyclingBundleID: String?
+    private static var cyclingWindowCount = 0
 
     /// Toggle: if the app is frontmost, cycle its windows then hide after
     /// all windows have been shown. Otherwise launch/activate it.
@@ -16,6 +20,7 @@ enum DockAppLauncher {
         } else {
             cycleCount = 0
             cyclingBundleID = nil
+            cyclingWindowCount = 0
             launchOrFocus(bundleID: bundleID, appPath: appPath)
         }
     }
@@ -41,7 +46,7 @@ enum DockAppLauncher {
                 log.error("openApplication failed for \(bundleID, privacy: .public): \(error.localizedDescription, privacy: .public)")
             } else if let app = app {
                 // As a fallback to ensure all windows are brought forward
-                AccessibilityActivator.activate(pid: app.processIdentifier)
+                _ = AccessibilityActivator.activate(pid: app.processIdentifier)
             }
         }
     }
@@ -58,19 +63,21 @@ enum DockAppLauncher {
             withBundleIdentifier: bundleID
         ).first else { return }
 
-        if cyclingBundleID != bundleID {
-            cycleCount = 0
-            cyclingBundleID = bundleID
-        }
-
         let windowCount = AccessibilityActivator.windowCount(
             pid: running.processIdentifier
         )
+        if cyclingBundleID != bundleID || cyclingWindowCount != windowCount {
+            cycleCount = 0
+            cyclingBundleID = bundleID
+            cyclingWindowCount = windowCount
+        }
+
         // Already cycled through all windows → hide
         if windowCount <= 1 || cycleCount >= windowCount - 1 {
             running.hide()
             cycleCount = 0
             cyclingBundleID = nil
+            cyclingWindowCount = 0
             return
         }
 
@@ -80,6 +87,7 @@ enum DockAppLauncher {
             running.hide()
             cycleCount = 0
             cyclingBundleID = nil
+            cyclingWindowCount = 0
         }
     }
 }

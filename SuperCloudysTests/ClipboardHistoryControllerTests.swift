@@ -1,50 +1,41 @@
 import XCTest
 @testable import SuperCloudys
 
-@MainActor
 final class ClipboardHistoryControllerTests: XCTestCase {
 
-    private var tempDir: URL!
-    private var store: ClipboardStore!
-    private var settings: ClipboardSettings!
-    private var monitor: ClipboardMonitorService!
-    private var controller: ClipboardHistoryController!
-
-    override func setUp() {
-        super.setUp()
-        tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ClipboardHistoryControllerTests_\(UUID().uuidString)")
-        settings = ClipboardSettings()
-        store = ClipboardStore(maxEntries: 10, storageDirectory: tempDir)
-        monitor = ClipboardMonitorService(settings: settings)
-        controller = ClipboardHistoryController(store: store, monitor: monitor, settings: settings)
-    }
-
-    override func tearDown() {
-        monitor.stop()
-        try? FileManager.default.removeItem(at: tempDir)
-        controller = nil
-        monitor = nil
-        store = nil
-        settings = nil
-        super.tearDown()
-    }
-
+    @MainActor
     func testCycleTypeFilterWrapsForwardAndBackward() {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ClipboardHistoryControllerTests_\(UUID().uuidString)")
+        let suiteName = "ClipboardHistoryControllerTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let settings = ClipboardSettings(defaults: defaults)
+        let store = ClipboardStore(maxEntries: 10, storageDirectory: tempDir)
+        let monitor = ClipboardMonitorService(settings: settings)
+        let controller = ClipboardHistoryController(
+            store: store, monitor: monitor, settings: settings
+        )
+        defer {
+            monitor.stop()
+            store.flush()
+            defaults.removePersistentDomain(forName: suiteName)
+            try? FileManager.default.removeItem(at: tempDir)
+        }
+
         XCTAssertNil(controller.typeFilter)
 
         controller.cycleTypeFilter()
         XCTAssertEqual(controller.typeFilter, .text)
 
-        for _ in ClipboardContentType.allCases.dropFirst() {
+        for _ in ClipboardContentType.filterCases.dropFirst() {
             controller.cycleTypeFilter()
         }
-        XCTAssertEqual(controller.typeFilter, .unknown)
+        XCTAssertEqual(controller.typeFilter, .color)
 
         controller.cycleTypeFilter()
         XCTAssertNil(controller.typeFilter)
 
         controller.cycleTypeFilter(reverse: true)
-        XCTAssertEqual(controller.typeFilter, .unknown)
+        XCTAssertEqual(controller.typeFilter, .color)
     }
 }

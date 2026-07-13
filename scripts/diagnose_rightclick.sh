@@ -27,15 +27,15 @@ for i in 3 2 1; do
 done
 
 START_TIME=$(date "+%Y-%m-%d %H:%M:%S")
-START_EPOCH=$(date +%s.%N)
+START_EPOCH=$(date +%s)
 echo "🎯 现在右键!可以右键多次,采样 8 秒"
 
 SAMPLE_FILE=$(mktemp -t finder_sample.XXXXXX).txt
 sample "$FINDER_PID" 8 -file "$SAMPLE_FILE" >/dev/null 2>&1
 
 END_TIME=$(date "+%Y-%m-%d %H:%M:%S")
-END_EPOCH=$(date +%s.%N)
-ELAPSED=$(echo "$END_EPOCH - $START_EPOCH" | bc)
+END_EPOCH=$(date +%s)
+ELAPSED=$((END_EPOCH - START_EPOCH))
 echo ""
 echo "✅ 采样完成 ($ELAPSED 秒)"
 echo ""

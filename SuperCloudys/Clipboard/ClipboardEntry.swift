@@ -1,6 +1,6 @@
 import Foundation
 
-enum ClipboardContentType: String, Codable, CaseIterable {
+enum ClipboardContentType: String, Codable, CaseIterable, Sendable {
     case text
     case richText
     case url
@@ -10,7 +10,7 @@ enum ClipboardContentType: String, Codable, CaseIterable {
     case unknown
 }
 
-struct ClipboardEntry: Identifiable, Codable, Hashable {
+struct ClipboardEntry: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
     let contentType: ClipboardContentType
     let plainText: String?
@@ -42,11 +42,26 @@ struct ClipboardEntry: Identifiable, Codable, Hashable {
     }
 
     static func fingerprint(type: ClipboardContentType, content: String?) -> String {
-        let raw = "\(type.rawValue):\(content ?? "")"
         var hash: UInt64 = 5381
-        for byte in raw.utf8 {
+        update(&hash, with: type.rawValue.utf8)
+        hash = hash &* 33 &+ 58 // ":"
+        update(&hash, with: (content ?? "").utf8)
+        return String(hash, radix: 16)
+    }
+
+    static func fingerprint(type: ClipboardContentType, data: Data) -> String {
+        var hash: UInt64 = 5381
+        update(&hash, with: type.rawValue.utf8)
+        update(&hash, with: data)
+        return String(hash, radix: 16)
+    }
+
+    private static func update<S: Sequence>(
+        _ hash: inout UInt64,
+        with bytes: S
+    ) where S.Element == UInt8 {
+        for byte in bytes {
             hash = hash &* 33 &+ UInt64(byte)
         }
-        return String(hash, radix: 16)
     }
 }

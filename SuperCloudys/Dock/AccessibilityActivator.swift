@@ -1,38 +1,28 @@
 import AppKit
 import ApplicationServices
-import os
 
 enum AccessibilityActivator {
 
-    private static let log = Logger(subsystem: "com.yeshan333.SuperCloudys", category: "AXActivator")
+    private static let messagingTimeout: Float = 0.5
 
     static var isTrusted: Bool { AXIsProcessTrusted() }
 
     @discardableResult
     static func requestTrust() -> Bool {
-        let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
-        return AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
+        AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
     }
 
-    /// 仅在未授权且距上次提示超过 7 天时弹窗，避免每次启动都打扰用户
-    static func promptTrustIfNeeded() {
-        guard !isTrusted else { return }
-
-        let cooldownKey = "lastAccessibilityPromptDate"
-        let defaults = UserDefaults.standard
-        if let lastPrompt = defaults.object(forKey: cooldownKey) as? Date,
-           Date().timeIntervalSince(lastPrompt) < 7 * 24 * 3600 {
-            return
-        }
-
-        defaults.set(Date(), forKey: cooldownKey)
-        requestTrust()
+    static func openSystemSettings() {
+        guard let url = URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+        ) else { return }
+        NSWorkspace.shared.open(url)
     }
 
     /// Sets the target app as frontmost via AXUIElement. Returns true on success.
     static func activate(pid: pid_t) -> Bool {
         guard AXIsProcessTrusted() else { return false }
-        let app = AXUIElementCreateApplication(pid)
+        let app = applicationElement(pid: pid)
         let result = AXUIElementSetAttributeValue(
             app, kAXFrontmostAttribute as CFString, kCFBooleanTrue
         )
@@ -41,7 +31,7 @@ enum AccessibilityActivator {
 
     static func windowCount(pid: pid_t) -> Int {
         guard AXIsProcessTrusted() else { return 0 }
-        let app = AXUIElementCreateApplication(pid)
+        let app = applicationElement(pid: pid)
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
             app, kAXWindowsAttribute as CFString, &value
@@ -55,7 +45,7 @@ enum AccessibilityActivator {
     /// Returns true if a cycle was performed.
     static func cycleWindows(pid: pid_t) -> Bool {
         guard AXIsProcessTrusted() else { return false }
-        let app = AXUIElementCreateApplication(pid)
+        let app = applicationElement(pid: pid)
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
             app, kAXWindowsAttribute as CFString, &value
@@ -79,13 +69,19 @@ enum AccessibilityActivator {
         }
 
         let target = windows[targetIndex]
-        AXUIElementSetAttributeValue(
+        _ = AXUIElementSetAttributeValue(
             target, kAXMainAttribute as CFString, kCFBooleanTrue
         )
-        AXUIElementPerformAction(target, kAXRaiseAction as CFString)
-        AXUIElementSetAttributeValue(
+        let raised = AXUIElementPerformAction(target, kAXRaiseAction as CFString)
+        let frontmost = AXUIElementSetAttributeValue(
             app, kAXFrontmostAttribute as CFString, kCFBooleanTrue
         )
-        return true
+        return raised == .success && frontmost == .success
+    }
+
+    private static func applicationElement(pid: pid_t) -> AXUIElement {
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, messagingTimeout)
+        return app
     }
 }

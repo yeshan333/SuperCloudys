@@ -52,14 +52,14 @@ struct EntryListView: View {
                             .font(.system(size: 32))
                             .foregroundColor(.secondary.opacity(0.4))
                         Text(searchQuery.isEmpty
-                             ? NSLocalizedString("剪切板为空", comment: "")
+                             ? NSLocalizedString("剪贴板为空", comment: "")
                              : NSLocalizedString("没有找到 “\(searchQuery)”", comment: ""))
                             .font(.system(size: 12))
                             .foregroundColor(.secondary.opacity(0.6))
                     }
                 }
             }
-            .onChange(of: selectedID) { id in
+            .onChange(of: selectedID) { _, id in
                 if let id {
                     withAnimation(.easeOut(duration: 0.15)) {
                         proxy.scrollTo(id)

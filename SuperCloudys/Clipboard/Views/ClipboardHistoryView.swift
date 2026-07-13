@@ -7,6 +7,7 @@ struct ClipboardHistoryView: View {
     @State private var selectedID: UUID?
     @State private var keyboardMonitor: Any?
     @State private var copyToast: String?
+    @State private var showsClearAllConfirmation = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -50,11 +51,13 @@ struct ClipboardHistoryView: View {
                 .frame(height: 1)
                 
             BottomBarView(
-                appName: selectedEntry?.sourceAppName,
+                appName: controller.previousApp?.localizedName,
+                canCopy: selectedEntry != nil,
+                canPaste: selectedEntry != nil && controller.canPasteToPreviousApp,
                 onPaste: { pasteSelected() },
                 onCopy: { copySelected() },
                 onClearUnpinned: { controller.clearUnpinned() },
-                onClearAll: { controller.clearAll() }
+                onClearAll: { showsClearAllConfirmation = true }
             )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -64,10 +67,10 @@ struct ClipboardHistoryView: View {
             installKeyboardMonitor()
         }
         .onDisappear { removeKeyboardMonitor() }
-        .onChange(of: controller.isPanelVisible) { visible in
+        .onChange(of: controller.isPanelVisible) { _, visible in
             if visible { selectedID = controller.filteredEntries.first?.id }
         }
-        .onChange(of: controller.filteredEntries) { _ in selectFirst() }
+        .onChange(of: controller.filteredEntries) { selectFirst() }
         .onExitCommand { onDismiss() }
         .onKeyPress(.upArrow) {
             withAnimation(.interactiveSpring(response: 0.25, dampingFraction: 0.8, blendDuration: 0.1)) {
@@ -94,6 +97,12 @@ struct ClipboardHistoryView: View {
             }
         }
         .animation(.easeOut(duration: 0.25), value: copyToast)
+        .alert("清空所有剪贴板历史？", isPresented: $showsClearAllConfirmation) {
+            Button("取消", role: .cancel) {}
+            Button("清空", role: .destructive) { controller.clearAll() }
+        } message: {
+            Text("固定条目和图片文件也会被永久删除。")
+        }
     }
 
     private var selectedEntry: ClipboardEntry? {
@@ -118,9 +127,19 @@ struct ClipboardHistoryView: View {
     }
 
     private func pasteEntry(entry: ClipboardEntry) {
+        guard controller.canPasteToPreviousApp else {
+            showToast("请先授予辅助功能权限")
+            return
+        }
         onDismiss()
         controller.clearSearch()
-        controller.pasteToFrontApp(entry)
+        Task { @MainActor in
+            guard await controller.pasteToFrontApp(entry) else {
+                ClipboardPanelController.shared.show()
+                showToast("粘贴失败，目标应用未能激活")
+                return
+            }
+        }
     }
 
     private func moveSelection(by offset: Int) {
@@ -137,11 +156,20 @@ struct ClipboardHistoryView: View {
 
     private func copySelected() {
         guard let entry = selectedEntry else { return }
-        controller.copyToClipboard(entry)
-        controller.clearSearch()
-        copyToast = NSLocalizedString("已复制到剪切板", comment: "")
+        Task { @MainActor in
+            guard await controller.copyToClipboard(entry) else {
+                showToast("复制失败，原始内容可能已不存在")
+                return
+            }
+            controller.clearSearch()
+            showToast(NSLocalizedString("已复制到剪贴板", comment: ""))
+        }
+    }
+
+    private func showToast(_ message: String) {
+        copyToast = message
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            copyToast = nil
+            if copyToast == message { copyToast = nil }
         }
     }
 
@@ -152,8 +180,8 @@ struct ClipboardHistoryView: View {
         keyboardMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             guard controller.isPanelVisible else { return event }
 
-            if let textView = NSApp.keyWindow?.firstResponder as? NSTextView,
-               textView.hasMarkedText() {
+            let textView = NSApp.keyWindow?.firstResponder as? NSTextView
+            if textView?.hasMarkedText() == true {
                 return event
             }
 
@@ -163,6 +191,17 @@ struct ClipboardHistoryView: View {
                 return nil
             case 48:
                 controller.cycleTypeFilter(reverse: event.modifierFlags.contains(.shift))
+                return nil
+            case 8 where event.modifierFlags.contains(.command):
+                if textView?.selectedRange().length ?? 0 > 0 { return event }
+                copySelected()
+                return nil
+            case 47 where event.modifierFlags.contains(.command):
+                if let id = selectedID { controller.togglePin(id: id) }
+                return nil
+            case 51 where event.modifierFlags.contains(.command):
+                if textView != nil { return event }
+                if let id = selectedID { controller.delete(id: id) }
                 return nil
             default:
                 return event

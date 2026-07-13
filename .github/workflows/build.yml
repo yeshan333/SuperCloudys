@@ -25,94 +25,145 @@ jobs:
 
       - name: Determine version
         id: version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
-          if [[ "${{ github.ref_type }}" == "tag" ]]; then
-            VERSION="${{ github.ref_name }}"
-          elif [[ -n "${{ github.event.inputs.version }}" && "${{ github.event.inputs.version }}" != "dev" ]]; then
-            VERSION="${{ github.event.inputs.version }}"
+          if [[ "$REF_TYPE" == "tag" ]]; then
+            VERSION="$REF_NAME"
+            VERSION="${VERSION#v}"
+            LABEL="$REF_NAME"
+          elif [[ -n "$INPUT_VERSION" && "$INPUT_VERSION" != "dev" ]]; then
+            VERSION="$INPUT_VERSION"
+            VERSION="${VERSION#v}"
+            LABEL="v${VERSION}"
           else
-            VERSION="dev-$(git rev-parse --short HEAD)"
+            VERSION="0.0.0"
+            LABEL="dev-$(git rev-parse --short HEAD)"
+          fi
+          if [[ ! "$VERSION" =~ ^[0-9]+(\.[0-9]+){1,2}$ ]]; then
+            echo "Invalid version: $VERSION" >&2
+            exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Version: $VERSION"
+          echo "label=$LABEL" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION ($LABEL)"
 
       - name: Generate Xcode project
         run: xcodegen generate
 
-      - name: Setup code signing
+      - name: Test
         run: |
-          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
-          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+          ARCH="$(uname -m)"
+          xcodebuild test \
+            -project SuperCloudys.xcodeproj \
+            -scheme SuperCloudysTests \
+            -destination "platform=macOS,arch=$ARCH" \
+            MARKETING_VERSION="${{ steps.version.outputs.version }}" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}"
 
-          # Create temporary keychain
+      - name: Analyze
+        run: |
+          xcodebuild analyze \
+            -project SuperCloudys.xcodeproj \
+            -scheme SuperCloudys \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            MARKETING_VERSION="${{ steps.version.outputs.version }}" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}"
+
+      - name: Setup code signing
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          : "${BUILD_CERTIFICATE_BASE64:?Missing DEVELOPER_ID_CERTIFICATE_BASE64 secret}"
+          : "${P12_PASSWORD:?Missing DEVELOPER_ID_CERTIFICATE_PASSWORD secret}"
+          : "${KEYCHAIN_PASSWORD:?Missing KEYCHAIN_PASSWORD secret}"
+
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+          CERTIFICATE_PATH="$RUNNER_TEMP/developer-id.p12"
+          echo "$BUILD_CERTIFICATE_BASE64" | base64 --decode > "$CERTIFICATE_PATH"
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-          # Generate self-signed code signing certificate with proper extensions
-          cat > "$RUNNER_TEMP/cert.conf" <<CONF
-          [req]
-          distinguished_name = req_dn
-          x509_extensions = codesign_ext
-          prompt = no
-
-          [req_dn]
-          CN = SuperCloudys Development
-
-          [codesign_ext]
-          keyUsage = critical, digitalSignature
-          extendedKeyUsage = codeSigning
-          basicConstraints = critical, CA:false
-          CONF
-
-          openssl req -x509 -newkey rsa:2048 \
-            -keyout "$RUNNER_TEMP/key.pem" \
-            -out "$RUNNER_TEMP/cert.pem" \
-            -days 1 -nodes \
-            -config "$RUNNER_TEMP/cert.conf"
-
-          openssl pkcs12 -export \
-            -out "$RUNNER_TEMP/cert.p12" \
-            -inkey "$RUNNER_TEMP/key.pem" \
-            -in "$RUNNER_TEMP/cert.pem" \
-            -passout pass:ci-temp
-
-          # Import certificate into keychain
-          security import "$RUNNER_TEMP/cert.p12" \
-            -k "$KEYCHAIN_PATH" -P ci-temp \
+          security import "$CERTIFICATE_PATH" \
+            -k "$KEYCHAIN_PATH" -P "$P12_PASSWORD" \
             -T /usr/bin/codesign -T /usr/bin/security
-
           security set-key-partition-list \
             -S apple-tool:,apple: -s \
             -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
           security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
           security default-keychain -s "$KEYCHAIN_PATH"
-
-          # Verify certificate is available
           security find-identity -v -p codesigning "$KEYCHAIN_PATH"
-
-          # Cleanup sensitive files
-          rm -f "$RUNNER_TEMP/key.pem" "$RUNNER_TEMP/cert.pem" "$RUNNER_TEMP/cert.p12" "$RUNNER_TEMP/cert.conf"
+          rm -f "$CERTIFICATE_PATH"
 
       - name: Build
+        env:
+          CODE_SIGN_IDENTITY: ${{ secrets.DEVELOPER_ID_APPLICATION }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
+          : "${CODE_SIGN_IDENTITY:?Missing DEVELOPER_ID_APPLICATION secret}"
+          : "${APPLE_TEAM_ID:?Missing APPLE_TEAM_ID secret}"
           xcodebuild \
             -project SuperCloudys.xcodeproj \
             -scheme SuperCloudys \
             -configuration Release \
+            -destination 'generic/platform=macOS' \
             build \
-            CODE_SIGN_IDENTITY="SuperCloudys Development" \
+            CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY" \
             CODE_SIGNING_REQUIRED=YES \
             CODE_SIGNING_ALLOWED=YES \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
+            CLANG_COVERAGE_MAPPING=NO \
+            CLANG_ENABLE_CODE_COVERAGE=NO \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            MARKETING_VERSION="${{ steps.version.outputs.version }}" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
             CONFIGURATION_BUILD_DIR="$(pwd)/build"
 
+          codesign --verify --deep --strict --verbose=2 build/SuperCloudys.app
+          if size -m build/SuperCloudys.app/Contents/MacOS/SuperCloudys | grep -F __LLVM_COV >/dev/null; then
+            echo "Release binary unexpectedly contains code coverage instrumentation" >&2
+            exit 1
+          fi
+          if codesign -d --entitlements :- build/SuperCloudys.app 2>/dev/null | grep -F get-task-allow >/dev/null; then
+            echo "Release app unexpectedly allows debugger attachment" >&2
+            exit 1
+          fi
+
       - name: Create DMG
+        env:
+          VERSION_LABEL: ${{ steps.version.outputs.label }}
+          CODE_SIGN_IDENTITY: ${{ secrets.DEVELOPER_ID_APPLICATION }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          DMG_NAME="SuperCloudys-${VERSION}.dmg"
+          : "${CODE_SIGN_IDENTITY:?Missing DEVELOPER_ID_APPLICATION secret}"
+          DMG_NAME="SuperCloudys-${VERSION_LABEL}.dmg"
           ./scripts/create-dmg.sh build/SuperCloudys.app "build/$DMG_NAME"
+          codesign --force --timestamp --sign "$CODE_SIGN_IDENTITY" "build/$DMG_NAME"
           echo "DMG_NAME=$DMG_NAME" >> "$GITHUB_ENV"
+
+      - name: Notarize
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          : "${APPLE_ID:?Missing APPLE_ID secret}"
+          : "${APPLE_TEAM_ID:?Missing APPLE_TEAM_ID secret}"
+          : "${APPLE_APP_SPECIFIC_PASSWORD:?Missing APPLE_APP_SPECIFIC_PASSWORD secret}"
+          xcrun notarytool submit "build/$DMG_NAME" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --wait
+          xcrun stapler staple "build/$DMG_NAME"
+          xcrun stapler validate "build/$DMG_NAME"
+          spctl --assess --type open --context context:primary-signature \
+            --verbose=2 "build/$DMG_NAME"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

@@ -8,7 +8,18 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.9"
+    SWIFT_STRICT_CONCURRENCY: complete
     MACOSX_DEPLOYMENT_TARGET: "14.0"
+    MARKETING_VERSION: "2.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    VERSIONING_SYSTEM: apple-generic
+    ENABLE_HARDENED_RUNTIME: YES
+  configs:
+    Release:
+      CLANG_ENABLE_CODE_COVERAGE: NO
+      CLANG_COVERAGE_MAPPING: NO
+      GCC_GENERATE_TEST_COVERAGE_FILES: NO
+      GCC_INSTRUMENT_PROGRAM_FLOW_ARCS: NO
 
 targets:
   SuperCloudys:
@@ -24,8 +35,6 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.yeshan333.SuperCloudys
         INFOPLIST_FILE: SuperCloudys/Info.plist
         CODE_SIGN_ENTITLEMENTS: SuperCloudys/SuperCloudys.entitlements
-        ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES: true
-        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
     dependencies:
       - target: SuperCloudysExtension
         embed: true
@@ -47,7 +56,6 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.yeshan333.SuperCloudys.FinderSyncExtension
         INFOPLIST_FILE: SuperCloudysExtension/Info.plist
         CODE_SIGN_ENTITLEMENTS: SuperCloudysExtension/SuperCloudysExtension.entitlements
-        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../../../../../Frameworks"
     frameworks:
       - sdk: FinderSync.framework
 

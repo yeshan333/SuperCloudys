@@ -8,7 +8,14 @@ struct DockAppsSection: View {
         Section("Dock 快捷键") {
             Toggle("启用 Cmd+1~0 快捷键", isOn: $monitor.shortcutsEnabled)
 
-            if monitor.apps.isEmpty {
+            if !monitor.shortcutRegistrationFailures.isEmpty {
+                Text("快捷键注册失败：\(monitor.shortcutRegistrationFailures.joined(separator: "、"))")
+                    .foregroundStyle(.red)
+            }
+
+            if let error = monitor.readError {
+                Text(error).foregroundStyle(.red)
+            } else if monitor.apps.isEmpty {
                 Text("未检测到 Dock 应用").foregroundStyle(.secondary)
             } else {
                 ForEach(monitor.apps.prefix(DockApp.maxShortcutApps)) { app in

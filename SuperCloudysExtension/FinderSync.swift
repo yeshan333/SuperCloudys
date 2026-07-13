@@ -2,40 +2,26 @@ import Cocoa
 import FinderSync
 import os
 
-class FinderSync: FIFinderSync {
-
-    /// 当前菜单使用的应用列表(每次 menu(for:) 时刷新)
-    private var menuApps: [ExternalApp] = []
-
-    /// 缓存:内置应用中已安装的列表(init 时检测一次,避免每次右键重复检测)
-    private var cachedBuiltinApps: [ExternalApp] = []
+class FinderSync: FIFinderSync, @unchecked Sendable {
 
     /// 预构建的菜单快照(后台 utility queue 维护,menu(for:) 主线程读)
     private struct MenuSnapshot {
         let apps: [ExternalApp]
         let icons: [String: NSImage]
         let customAppsMTime: Date?
+        let createdAt: Date
     }
     private let snapshotLock = NSLock()
     private var snapshot: MenuSnapshot?
+    private var isRebuildingSnapshot = false
 
     private static let log = Logger(subsystem: "com.yeshan333.SuperCloudys", category: "perf")
 
     override init() {
-        let t0 = Date()
         super.init()
-        let t1 = Date()
         FIFinderSyncController.default().directoryURLs = [
             URL(fileURLWithPath: "/")
         ]
-        let t2 = Date()
-        cachedBuiltinApps = detectInstalledBuiltinApps()
-        let t3 = Date()
-        let superMs = (t1.timeIntervalSince(t0)) * 1000
-        let dirMs   = (t2.timeIntervalSince(t1)) * 1000
-        let detMs   = (t3.timeIntervalSince(t2)) * 1000
-        let totMs   = (t3.timeIntervalSince(t0)) * 1000
-        Self.log.debug("init breakdown super=\(superMs, format: .fixed(precision: 1))ms dirURLs=\(dirMs, format: .fixed(precision: 1))ms detect=\(detMs, format: .fixed(precision: 1))ms total=\(totMs, format: .fixed(precision: 1))ms apps=\(self.cachedBuiltinApps.count)")
         rebuildSnapshotInBackground()
     }
 
@@ -51,16 +37,19 @@ class FinderSync: FIFinderSync {
         let menuStart = Date()
 
         let (apps, icons, snapshotHit) = resolveMenuData()
-        menuApps = apps
 
         let menu = NSMenu(title: AppConstants.appName)
-        for (index, app) in apps.enumerated() {
+        for app in apps {
             let item = NSMenuItem(
                 title: "通过 \(app.name) 打开",
                 action: #selector(handleOpenApp(_:)),
                 keyEquivalent: ""
             )
-            item.tag = index
+            item.representedObject = [
+                "name": app.name,
+                "bundleID": app.bundleID,
+                "appPath": app.appPath
+            ]
             item.image = icons[app.appPath]
             menu.addItem(item)
         }
@@ -88,9 +77,13 @@ class FinderSync: FIFinderSync {
     @objc func handleOpenApp(_ sender: NSMenuItem) {
         let urls = resolveTargetURLs()
         guard !urls.isEmpty else { return }
-        let index = sender.tag
-        guard index >= 0, index < menuApps.count else { return }
-        OpenAppAction.execute(app: menuApps[index], urls: urls)
+        guard let value = sender.representedObject as? [String: String],
+              let name = value["name"], let bundleID = value["bundleID"],
+              let appPath = value["appPath"] else { return }
+        OpenAppAction.execute(
+            app: ExternalApp(name: name, bundleID: bundleID, appPath: appPath),
+            urls: urls
+        )
     }
 
     @objc func handleCopyPath(_ sender: NSMenuItem) {
@@ -101,7 +94,7 @@ class FinderSync: FIFinderSync {
 
     // MARK: - Snapshot pipeline
 
-    /// 命中时返回快照里的数据;失效时同步构建并触发后台刷新
+    /// 命中时返回快照；失效时先返回旧快照并后台刷新，仅冷启动同步构建。
     private func resolveMenuData() -> ([ExternalApp], [String: NSImage], Bool) {
         let currentMTime = CustomAppStore.fileMTime()
 
@@ -109,27 +102,53 @@ class FinderSync: FIFinderSync {
         let snap = snapshot
         snapshotLock.unlock()
 
-        if let snap, snap.customAppsMTime == currentMTime {
+        if let snap, snap.customAppsMTime != currentMTime {
+            let apps = computeAppList()
+            rebuildSnapshotInBackground()
+            return (apps, snap.icons, false)
+        }
+
+        if let snap,
+           snap.customAppsMTime == currentMTime,
+           Date().timeIntervalSince(snap.createdAt) < 60 {
             return (snap.apps, snap.icons, true)
         }
 
-        // 降级:同步构建一次,返回结果,同时触发后台重建以命中下一次
+        if let snap {
+            rebuildSnapshotInBackground()
+            return (snap.apps, snap.icons, false)
+        }
+
+        // 冷启动只同步解析应用列表；图标由已启动的后台快照任务加载。
         let apps = computeAppList()
-        let icons = loadIcons(for: apps)
         rebuildSnapshotInBackground()
-        return (apps, icons, false)
+        return (apps, [:], false)
     }
 
     private func rebuildSnapshotInBackground() {
+        snapshotLock.lock()
+        guard !isRebuildingSnapshot else {
+            snapshotLock.unlock()
+            return
+        }
+        isRebuildingSnapshot = true
+        snapshotLock.unlock()
+
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self else { return }
             let t0 = Date()
             let apps = self.computeAppList()
             let icons = self.loadIcons(for: apps)
             let mtime = CustomAppStore.fileMTime()
-            let snap = MenuSnapshot(apps: apps, icons: icons, customAppsMTime: mtime)
+            let snap = MenuSnapshot(
+                apps: apps,
+                icons: icons,
+                customAppsMTime: mtime,
+                createdAt: Date()
+            )
             self.snapshotLock.lock()
             self.snapshot = snap
+            self.isRebuildingSnapshot = false
             self.snapshotLock.unlock()
             let ms = Date().timeIntervalSince(t0) * 1000
             Self.log.debug("snapshot rebuilt in \(ms, format: .fixed(precision: 1)) ms apps=\(apps.count)")
@@ -137,15 +156,20 @@ class FinderSync: FIFinderSync {
     }
 
     private func computeAppList() -> [ExternalApp] {
-        var apps = cachedBuiltinApps
+        var apps = detectInstalledBuiltinApps()
         for custom in CustomAppStore.load() {
-            guard !apps.contains(where: { $0.appPath == custom.appPath }) else { continue }
-            guard FileManager.default.fileExists(atPath: custom.appPath) else { continue }
+            let appPath = custom.bundleID.flatMap {
+                NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0)?.path
+            } ?? custom.appPath
+            guard !apps.contains(where: { existing in
+                existing.appPath == appPath
+                    || (custom.bundleID.map { $0 == existing.bundleID } ?? false)
+            }) else { continue }
+            guard FileManager.default.fileExists(atPath: appPath) else { continue }
             apps.append(ExternalApp(
                 name: custom.name,
-                bundleID: "",
-                appPath: custom.appPath,
-                cliNames: []
+                bundleID: custom.bundleID ?? "",
+                appPath: appPath
             ))
         }
         return apps
@@ -165,8 +189,13 @@ class FinderSync: FIFinderSync {
     // MARK: - Helpers
 
     private func detectInstalledBuiltinApps() -> [ExternalApp] {
-        ExternalApp.allApps.filter { app in
-            FileManager.default.fileExists(atPath: app.appPath)
+        ExternalApp.allApps.compactMap { app in
+            let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: app.bundleID)
+                ?? (FileManager.default.fileExists(atPath: app.appPath)
+                    ? URL(fileURLWithPath: app.appPath)
+                    : nil)
+            guard let url else { return nil }
+            return ExternalApp(name: app.name, bundleID: app.bundleID, appPath: url.path)
         }
     }
 

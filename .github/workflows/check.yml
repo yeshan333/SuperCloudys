@@ -1,0 +1,30 @@
+name: Check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen
+      - run: xcodegen generate
+      - name: Test
+        run: |
+          xcodebuild test \
+            -project SuperCloudys.xcodeproj \
+            -scheme SuperCloudysTests \
+            -destination "platform=macOS,arch=$(uname -m)"
+      - name: Analyze Release
+        run: |
+          xcodebuild analyze \
+            -project SuperCloudys.xcodeproj \
+            -scheme SuperCloudys \
+            -configuration Release \
+            -destination 'generic/platform=macOS'

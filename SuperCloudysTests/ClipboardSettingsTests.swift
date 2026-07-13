@@ -4,10 +4,21 @@ import XCTest
 final class ClipboardSettingsTests: XCTestCase {
 
     private var settings: ClipboardSettings!
+    private var defaults: UserDefaults!
+    private var suiteName: String!
 
     override func setUp() {
         super.setUp()
-        settings = ClipboardSettings.shared
+        suiteName = "ClipboardSettingsTests.\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suiteName)
+        settings = ClipboardSettings(defaults: defaults)
+    }
+
+    override func tearDown() {
+        defaults.removePersistentDomain(forName: suiteName)
+        settings = nil
+        defaults = nil
+        super.tearDown()
     }
 
     func testDefaultExcludedAppsContains1Password() {
@@ -22,10 +33,16 @@ final class ClipboardSettingsTests: XCTestCase {
         XCTAssertFalse(settings.isAppExcluded("com.apple.Safari"))
     }
 
+    func testDefaultExcludedAppCanBeExplicitlyIncluded() {
+        var excluded = settings.excludedApps
+        excluded.remove("com.apple.keychainaccess")
+        settings.excludedApps = excluded
+
+        XCTAssertFalse(settings.isAppExcluded("com.apple.keychainaccess"))
+    }
+
     func testMaxEntriesDefault() {
         // Clear any previously saved value
-        UserDefaults.standard.removeObject(forKey: "clipboard_maxEntries")
-        let fresh = ClipboardSettings.shared
-        XCTAssertEqual(fresh.maxEntries, 500)
+        XCTAssertEqual(settings.maxEntries, 500)
     }
 }

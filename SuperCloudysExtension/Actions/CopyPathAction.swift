@@ -8,6 +8,8 @@ enum CopyPathAction {
 
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.setString(combined, forType: .string)
+        if !pasteboard.setString(combined, forType: .string) {
+            NSSound.beep()
+        }
     }
 }

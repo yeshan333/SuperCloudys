@@ -1,7 +1,7 @@
 import Foundation
 
 struct DockApp: Identifiable, Equatable {
-    var id: String { bundleID }
+    var id: String { "\(bundleID)|\(appPath)|\(shortcutLabel ?? "-")" }
     let name: String
     let bundleID: String
     let appPath: String

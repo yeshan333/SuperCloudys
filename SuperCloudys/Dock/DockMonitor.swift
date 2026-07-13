@@ -13,9 +13,10 @@ final class DockMonitor: ObservableObject {
             updateShortcuts()
         }
     }
+    @Published private(set) var shortcutRegistrationFailures: [String] = []
+    @Published private(set) var readError: String?
 
     private var source: DispatchSourceFileSystemObject?
-    private var lastBundleIDs: [String] = []
 
     init() {
         self.shortcutsEnabled = DockShortcutSettings.shortcutsEnabled
@@ -29,10 +30,10 @@ final class DockMonitor: ObservableObject {
 
     /// Force a re-read of the Dock plist and re-register shortcuts.
     func refresh(forceRegister: Bool = false) {
-        let newApps = DockReader.readApps()
-        let newIDs = newApps.map(\.bundleID)
-        let changed = newIDs != lastBundleIDs
-        lastBundleIDs = newIDs
+        let result = DockReader.readApps()
+        let newApps = result.apps
+        readError = result.error
+        let changed = newApps != apps
         self.apps = newApps
         if changed || forceRegister {
             updateShortcuts()
@@ -41,9 +42,10 @@ final class DockMonitor: ObservableObject {
 
     private func updateShortcuts() {
         if shortcutsEnabled {
-            DockShortcutManager.shared.register(apps: apps)
+            shortcutRegistrationFailures = DockShortcutManager.shared.register(apps: apps)
         } else {
             DockShortcutManager.shared.unregisterAll()
+            shortcutRegistrationFailures = []
         }
     }
 

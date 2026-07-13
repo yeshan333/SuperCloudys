@@ -1,12 +1,22 @@
 import Foundation
+import os
 
 struct CustomApp: Codable, Identifiable, Equatable {
     var id: String { appPath }
     let name: String
     let appPath: String
+    let bundleID: String?
+
+    init(name: String, appPath: String, bundleID: String? = nil) {
+        self.name = name
+        self.appPath = appPath
+        self.bundleID = bundleID
+    }
 }
 
 enum CustomAppStore {
+
+    private static let log = Logger(subsystem: "com.yeshan333.SuperCloudys", category: "CustomApps")
 
     // MARK: - Path (computed once)
 
@@ -25,14 +35,23 @@ enum CustomAppStore {
         }
 
         try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("custom_apps.json")
+        try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
+        let config = dir.appendingPathComponent("custom_apps.json")
+        let legacyConfig = legacy.appendingPathComponent("custom_apps.json")
+        if fm.fileExists(atPath: legacyConfig.path), !fm.fileExists(atPath: config.path) {
+            try? fm.moveItem(at: legacyConfig, to: config)
+        }
+        if fm.fileExists(atPath: config.path) {
+            try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: config.path)
+        }
+        return config
     }()
 
     // MARK: - In-memory cache (per-process, mtime-invalidated)
 
     private static let cacheLock = NSLock()
-    private static var cachedApps: [CustomApp]?
-    private static var cachedMTime: Date?
+    private nonisolated(unsafe) static var cachedApps: [CustomApp]?
+    private nonisolated(unsafe) static var cachedMTime: Date?
 
     static func load() -> [CustomApp] {
         let currentMTime = fileMTime()
@@ -55,35 +74,53 @@ enum CustomAppStore {
         return apps
     }
 
-    static func save(_ apps: [CustomApp]) {
-        guard let data = try? JSONEncoder().encode(apps) else { return }
-        try? data.write(to: configURL, options: .atomic)
+    @discardableResult
+    static func save(_ apps: [CustomApp]) -> Bool {
+        do {
+            try JSONEncoder().encode(apps).write(to: configURL, options: .atomic)
+        } catch {
+            log.error("Cannot save custom apps: \(error.localizedDescription, privacy: .public)")
+            return false
+        }
+        do {
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o600],
+                ofItemAtPath: configURL.path
+            )
+        } catch {
+            log.warning("Cannot restrict custom app config permissions: \(error.localizedDescription, privacy: .public)")
+        }
 
         let mtime = fileMTime()
         cacheLock.lock()
         cachedApps = apps
         cachedMTime = mtime
         cacheLock.unlock()
+        return true
     }
 
-    static func add(_ app: CustomApp) {
+    @discardableResult
+    static func add(_ app: CustomApp) -> Bool {
         var apps = load()
-        guard !apps.contains(where: { $0.appPath == app.appPath }) else { return }
+        guard !apps.contains(where: { existing in
+            existing.appPath == app.appPath
+                || (app.bundleID.map { $0 == existing.bundleID } ?? false)
+        }) else { return true }
         apps.append(app)
-        save(apps)
+        return save(apps)
     }
 
-    static func remove(at index: Int) {
+    static func remove(at index: Int) -> Bool {
         var apps = load()
-        guard index >= 0, index < apps.count else { return }
+        guard index >= 0, index < apps.count else { return false }
         apps.remove(at: index)
-        save(apps)
+        return save(apps)
     }
 
-    static func remove(_ app: CustomApp) {
+    static func remove(_ app: CustomApp) -> Bool {
         var apps = load()
         apps.removeAll { $0.appPath == app.appPath }
-        save(apps)
+        return save(apps)
     }
 
     /// 文件最后修改时间,供消费方做缓存失效判断
@@ -95,10 +132,26 @@ enum CustomAppStore {
     // MARK: - Private
 
     private static func decodeFromDisk() -> [CustomApp] {
-        guard let data = try? Data(contentsOf: configURL),
-              let apps = try? JSONDecoder().decode([CustomApp].self, from: data) else {
+        guard FileManager.default.fileExists(atPath: configURL.path) else { return [] }
+        let data: Data
+        do {
+            data = try Data(contentsOf: configURL)
+        } catch {
+            log.error("Cannot read custom apps: \(error.localizedDescription, privacy: .public)")
             return []
         }
-        return apps
+        do {
+            return try JSONDecoder().decode([CustomApp].self, from: data)
+        } catch {
+            let backup = configURL.deletingPathExtension()
+                .appendingPathExtension("corrupt-\(UUID().uuidString).json")
+            do {
+                try FileManager.default.moveItem(at: configURL, to: backup)
+                log.error("Invalid custom app config moved to \(backup.path, privacy: .public)")
+            } catch {
+                log.error("Invalid custom app config could not be backed up: \(error.localizedDescription, privacy: .public)")
+            }
+            return []
+        }
     }
 }

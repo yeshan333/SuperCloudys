@@ -1,13 +1,16 @@
 import Carbon.HIToolbox
+import Combine
 import os
 
-final class ClipboardHotkeyManager {
+@MainActor
+final class ClipboardHotkeyManager: ObservableObject {
 
     static let shared = ClipboardHotkeyManager()
 
     private let log = Logger(subsystem: "com.yeshan333.SuperCloudys", category: "ClipboardHotkey")
     private var hotKeyRef: EventHotKeyRef?
     private var eventHandler: EventHandlerRef?
+    @Published private(set) var registrationError: String?
 
     private static let signature: OSType = 0x434C4950 // 'CLIP'
     private static let hotkeyID: UInt32 = 100
@@ -16,14 +19,14 @@ final class ClipboardHotkeyManager {
 
     func register() {
         guard hotKeyRef == nil else { return }
-        installEventHandler()
+        guard installEventHandler() else { return }
 
         let hotKeyID = EventHotKeyID(signature: Self.signature, id: Self.hotkeyID)
         var ref: EventHotKeyRef?
-        // kVK_ANSI_H = 0x04, controlKey modifier
+        // Cmd+Shift+V avoids stealing Ctrl+H/backspace from terminals.
         let status = RegisterEventHotKey(
-            UInt32(kVK_ANSI_H),
-            UInt32(controlKey),
+            UInt32(kVK_ANSI_V),
+            UInt32(cmdKey | shiftKey),
             hotKeyID,
             GetApplicationEventTarget(),
             0,
@@ -31,9 +34,11 @@ final class ClipboardHotkeyManager {
         )
         if status == noErr, let ref {
             hotKeyRef = ref
-            log.info("Registered Ctrl+H clipboard history hotkey")
+            registrationError = nil
+            log.info("Registered Cmd+Shift+V clipboard history hotkey")
         } else {
-            log.warning("Failed to register Ctrl+H hotkey (status=\(status))")
+            registrationError = "Cmd+Shift+V 注册失败（\(status)），可能与其他应用冲突"
+            log.warning("Failed to register Cmd+Shift+V hotkey (status=\(status))")
         }
     }
 
@@ -50,8 +55,8 @@ final class ClipboardHotkeyManager {
 
     // MARK: - Private
 
-    private func installEventHandler() {
-        guard eventHandler == nil else { return }
+    private func installEventHandler() -> Bool {
+        guard eventHandler == nil else { return true }
 
         var eventType = EventTypeSpec(
             eventClass: OSType(kEventClassKeyboard),
@@ -90,7 +95,10 @@ final class ClipboardHotkeyManager {
             &eventHandler
         )
         if status != noErr {
+            registrationError = "剪贴板快捷键事件处理器安装失败（\(status)）"
             log.error("InstallEventHandler for clipboard hotkey failed (status=\(status))")
+            return false
         }
+        return true
     }
 }

@@ -26,6 +26,18 @@ final class ClipboardEntryTests: XCTestCase {
         XCTAssertFalse(fp.isEmpty)
     }
 
+    func testImageFingerprintUsesContent() {
+        let data = Data([0, 1, 2, 3])
+        XCTAssertEqual(
+            ClipboardEntry.fingerprint(type: .image, data: data),
+            ClipboardEntry.fingerprint(type: .image, data: data)
+        )
+        XCTAssertNotEqual(
+            ClipboardEntry.fingerprint(type: .image, data: data),
+            ClipboardEntry.fingerprint(type: .image, data: Data([3, 2, 1, 0]))
+        )
+    }
+
     func testCharacterCount() {
         let entry = makeEntry(plainText: "Hello, 世界!")
         XCTAssertEqual(entry.characterCount, 10)

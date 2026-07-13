@@ -2,23 +2,26 @@ import Foundation
 
 enum DockReader {
 
-    static func readApps() -> [DockApp] {
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: dockPlistPath())) else {
-            return []
+    static func readApps() -> (apps: [DockApp], error: String?) {
+        do {
+            let data = try Data(contentsOf: URL(fileURLWithPath: dockPlistPath()))
+            guard let entries = persistentApps(from: data) else {
+                return ([], "Dock 配置格式无效。")
+            }
+            return (parseApps(entries), nil)
+        } catch {
+            return ([], "无法读取 Dock 配置：\(error.localizedDescription)")
         }
-        return parseApps(from: data)
     }
 
     /// Pure parser: turns a Dock plist payload into the resolved app list.
     /// Exposed for testing — does no I/O.
     static func parseApps(from plistData: Data) -> [DockApp] {
-        guard let root = try? PropertyListSerialization.propertyList(
-            from: plistData, options: [], format: nil
-        ) as? [String: Any],
-        let entries = root["persistent-apps"] as? [[String: Any]] else {
-            return []
-        }
+        guard let entries = persistentApps(from: plistData) else { return [] }
+        return parseApps(entries)
+    }
 
+    private static func parseApps(_ entries: [[String: Any]]) -> [DockApp] {
         var apps: [DockApp] = []
         for entry in entries {
             guard let app = parse(entry: entry, indexInFilteredList: apps.count) else {
@@ -27,6 +30,13 @@ enum DockReader {
             apps.append(app)
         }
         return apps
+    }
+
+    private static func persistentApps(from data: Data) -> [[String: Any]]? {
+        guard let root = try? PropertyListSerialization.propertyList(
+            from: data, options: [], format: nil
+        ) as? [String: Any] else { return nil }
+        return root["persistent-apps"] as? [[String: Any]]
     }
 
     // MARK: - Private

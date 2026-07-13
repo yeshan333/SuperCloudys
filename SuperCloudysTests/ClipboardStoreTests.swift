@@ -14,6 +14,8 @@ final class ClipboardStoreTests: XCTestCase {
     }
 
     override func tearDown() {
+        store.flush()
+        store = nil
         try? FileManager.default.removeItem(at: tempDir)
         super.tearDown()
     }
@@ -55,6 +57,15 @@ final class ClipboardStoreTests: XCTestCase {
         XCTAssertTrue(store.allEntries.first!.isPinned)
         store.togglePin(id: entry.id)
         XCTAssertFalse(store.allEntries.first!.isPinned)
+    }
+
+    func testMarkUsedUpdatesTimestamp() {
+        let entry = makeEntry(text: "used")
+        store.insert(entry)
+
+        store.markUsed(id: entry.id)
+
+        XCTAssertNotNil(store.allEntries.first?.lastUsedAt)
     }
 
     func testClearUnpinnedPreservesPinned() {
@@ -125,12 +136,91 @@ final class ClipboardStoreTests: XCTestCase {
         XCTAssertEqual(store.allEntries.first?.plainText, "recent")
     }
 
+    func testRetentionKeepsRecentlyUsedOldEntry() {
+        let oldButUsed = ClipboardEntry(
+            id: UUID(), contentType: .text, plainText: "old but used", title: "old but used",
+            subtitle: nil, createdAt: Date().addingTimeInterval(-86400 * 10),
+            sourceAppBundleID: nil, sourceAppName: nil, isPinned: false,
+            lastUsedAt: Date(), fingerprint: "old_but_used", imagePath: nil,
+            thumbnailPath: nil, filePaths: nil, colorHex: nil
+        )
+        store.insert(oldButUsed)
+
+        store.applyRetention(maxAge: 86400 * 7)
+
+        XCTAssertEqual(store.allEntries.first?.id, oldButUsed.id)
+    }
+
     func testPersistenceAcrossInstances() {
         store.insert(makeEntry(text: "persist"))
         store.flush()
         let store2 = ClipboardStore(maxEntries: 10, storageDirectory: tempDir)
         XCTAssertEqual(store2.allEntries.count, 1)
         XCTAssertEqual(store2.allEntries.first?.plainText, "persist")
+    }
+
+    func testStartupRemovesOnlyUnreferencedAssets() throws {
+        let referenced = store.assetsDirectory.appendingPathComponent("referenced.png")
+        let orphaned = store.assetsDirectory.appendingPathComponent("orphaned.png")
+        try Data([1]).write(to: referenced)
+        store.insert(makeImageEntry(fingerprint: "kept", original: referenced.path))
+        store.flush()
+        try Data([2]).write(to: orphaned)
+
+        _ = ClipboardStore(maxEntries: 10, storageDirectory: tempDir)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: referenced.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: orphaned.path))
+    }
+
+    func testDeletingImageRemovesItsAssets() throws {
+        let original = store.assetsDirectory.appendingPathComponent("image.png")
+        let thumbnail = store.assetsDirectory.appendingPathComponent("image_thumb.png")
+        try Data([1]).write(to: original)
+        try Data([2]).write(to: thumbnail)
+        let entry = makeImageEntry(
+            fingerprint: "image-1",
+            original: original.path,
+            thumbnail: thumbnail.path
+        )
+
+        store.insert(entry)
+        store.delete(id: entry.id)
+        store.flush()
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: original.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: thumbnail.path))
+    }
+
+    func testDeduplicatingImageRemovesOnlyNewAssets() throws {
+        let first = store.assetsDirectory.appendingPathComponent("first.png")
+        let duplicate = store.assetsDirectory.appendingPathComponent("duplicate.png")
+        try Data([1]).write(to: first)
+        try Data([1]).write(to: duplicate)
+
+        store.insert(makeImageEntry(fingerprint: "same-image", original: first.path))
+        store.insert(makeImageEntry(fingerprint: "same-image", original: duplicate.path))
+        store.flush()
+
+        XCTAssertEqual(store.allEntries.count, 1)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: first.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: duplicate.path))
+    }
+
+    func testCorruptHistoryIsBackedUp() throws {
+        let history = tempDir.appendingPathComponent("clipboard_history.json")
+        let preserved = store.assetsDirectory.appendingPathComponent("preserved.png")
+        try Data([1]).write(to: preserved)
+        try Data("not json".utf8).write(to: history)
+
+        let recovered = ClipboardStore(maxEntries: 10, storageDirectory: tempDir)
+        let files = try FileManager.default.contentsOfDirectory(
+            at: tempDir, includingPropertiesForKeys: nil
+        )
+
+        XCTAssertTrue(recovered.allEntries.isEmpty)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: preserved.path))
+        XCTAssertTrue(files.contains { $0.lastPathComponent.hasPrefix("clipboard_history.corrupt-") })
     }
 
     // MARK: - Helpers
@@ -152,6 +242,20 @@ final class ClipboardStoreTests: XCTestCase {
             thumbnailPath: nil,
             filePaths: nil,
             colorHex: nil
+        )
+    }
+
+    private func makeImageEntry(
+        fingerprint: String,
+        original: String,
+        thumbnail: String? = nil
+    ) -> ClipboardEntry {
+        ClipboardEntry(
+            id: UUID(), contentType: .image, plainText: nil, title: "Image",
+            subtitle: nil, createdAt: Date(), sourceAppBundleID: nil,
+            sourceAppName: nil, isPinned: false, lastUsedAt: nil,
+            fingerprint: fingerprint, imagePath: original,
+            thumbnailPath: thumbnail, filePaths: nil, colorHex: nil
         )
     }
 }

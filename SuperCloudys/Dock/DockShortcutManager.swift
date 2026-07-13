@@ -4,7 +4,7 @@ import os
 
 /// Registers global Cmd+1..Cmd+9, Cmd+0 hotkeys via Carbon Event Manager,
 /// dispatching to DockAppLauncher when fired.
-final class DockShortcutManager {
+final class DockShortcutManager: @unchecked Sendable {
 
     static let shared = DockShortcutManager()
 
@@ -17,7 +17,7 @@ final class DockShortcutManager {
     private static let signature: OSType = 0x524D4E55 // 'RMNU'
 
     private init() {
-        installEventHandler()
+        _ = installEventHandler()
     }
 
     deinit {
@@ -29,12 +29,20 @@ final class DockShortcutManager {
 
     // MARK: - Public
 
-    func register(apps: [DockApp]) {
+    func register(apps: [DockApp]) -> [String] {
         unregisterAll()
+        let handlerStatus = installEventHandler()
+        guard handlerStatus == noErr else {
+            return ["事件处理器安装失败（\(handlerStatus)）"]
+        }
+        var failures: [String] = []
         for (index, app) in apps.prefix(DockApp.maxShortcutApps).enumerated() {
             guard let keyCode = Self.keyCode(forIndex: index) else { continue }
-            register(keyCode: keyCode, bundleID: app.bundleID, appPath: app.appPath)
+            if let status = register(keyCode: keyCode, bundleID: app.bundleID, appPath: app.appPath) {
+                failures.append("⌘\(app.shortcutLabel ?? "?") \(app.name)（\(status)）")
+            }
         }
+        return failures
     }
 
     func unregisterAll() {
@@ -46,7 +54,7 @@ final class DockShortcutManager {
 
     // MARK: - Private
 
-    private func register(keyCode: UInt32, bundleID: String, appPath: String) {
+    private func register(keyCode: UInt32, bundleID: String, appPath: String) -> OSStatus? {
         let hotKeyID = EventHotKeyID(signature: Self.signature, id: nextID)
         var ref: EventHotKeyRef?
         let status = RegisterEventHotKey(
@@ -59,14 +67,16 @@ final class DockShortcutManager {
         )
         guard status == noErr, let ref else {
             log.warning("RegisterEventHotKey failed (status=\(status)) for keyCode=\(keyCode), bundle=\(bundleID)")
-            return
+            return status
         }
         hotKeyRefs.append(ref)
         handlers[nextID] = (bundleID, appPath)
         nextID += 1
+        return nil
     }
 
-    private func installEventHandler() {
+    private func installEventHandler() -> OSStatus {
+        guard eventHandler == nil else { return noErr }
         var eventType = EventTypeSpec(
             eventClass: OSType(kEventClassKeyboard),
             eventKind: OSType(kEventHotKeyPressed)
@@ -91,7 +101,9 @@ final class DockShortcutManager {
                   let entry = manager.handlers[hotKeyID.id] else {
                 return OSStatus(eventNotHandledErr)
             }
-            DockAppLauncher.toggle(bundleID: entry.bundleID, appPath: entry.appPath)
+            DispatchQueue.main.async {
+                DockAppLauncher.toggle(bundleID: entry.bundleID, appPath: entry.appPath)
+            }
             return noErr
         }
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
@@ -106,6 +118,7 @@ final class DockShortcutManager {
         if status != noErr {
             log.error("InstallEventHandler failed (status=\(status)); hotkeys will not fire")
         }
+        return status
     }
 
     private static func keyCode(forIndex index: Int) -> UInt32? {

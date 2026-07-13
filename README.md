@@ -1,257 +1,145 @@
 # SuperCloudys
 
-macOS 桌面增效工具:**Finder 右键菜单增强** + **Dock 全局快捷键** + **菜单栏管理**。
-
-## 截图
-
-| 菜单栏管理 | Finder 右键菜单 |
-|:---:|:---:|
-| ![菜单栏](screenshots/menubar.png) | ![右键菜单](screenshots/context-menu.png) |
+原生 macOS 桌面增效工具：Finder 右键菜单、Dock 全局快捷键、剪贴板历史和菜单栏管理。
 
 ## 功能
 
 ### Finder 右键菜单
 
-- **快速打开应用** - 右键直接通过 VSCode、Zed、Warp、Kaku 等应用打开文件/文件夹(自动检测已安装应用,显示对应图标)
-- **复制路径** - 一键复制选中文件/文件夹的完整路径
-- **自定义应用** - 通过菜单栏添加任意 `.app` 作为打开方式,可随时增删
+- 通过 VSCode、Zed、Warp、Kaku 或自定义 `.app` 打开所选文件/目录
+- 按 Bundle ID 定位已安装应用，支持 `/Applications` 之外的安装位置
+- 复制一个或多个所选项目的完整路径
+- 自定义应用变更会由 Finder 扩展后台刷新
 
 ### Dock 全局快捷键
 
-- **Cmd+1 ~ Cmd+9 / Cmd+0** - 一键激活/隐藏 Dock 中的前 10 个应用
-  - 应用未运行 → **冷启动**(直接用 Dock plist 里的路径,不依赖 LaunchServices 查询)
-  - 应用在后台 → 聚焦到前台
-  - 应用在前台且有多个窗口 → **依次轮换窗口**,全部轮换完后隐藏
-  - 应用在前台且只有单窗口 → 隐藏(toggle)
-- **自动跟随 Dock 变化** - 后台每 5 秒轮询 Dock 配置,自动重新绑定
-- **全局开关** - 菜单栏一键禁用/启用所有快捷键
-- **辅助功能授权(推荐)** - 授予后通过 `AXUIElement` 激活目标 App,绕过 macOS 14+ 焦点保护;未授权自动 fallback 到 `NSRunningApplication.activate()`
+- 默认关闭，可在菜单栏按需开启
+- `Cmd+1` ~ `Cmd+9`、`Cmd+0` 对应 Dock 前 10 个应用
+- 未运行时启动，后台时聚焦，前台时轮换窗口，轮换完成后隐藏
+- 使用文件系统事件自动跟随 Dock 变化，无后台轮询
+- 菜单栏会直接显示快捷键注册冲突
 
-### 其他
+### 剪贴板历史
 
-- **开机自启** - 菜单栏 Toggle 启用,基于 `SMAppService`（macOS 13+ API,无需 Login Items 权限对话框）
-- **文件默认打开方式管理** - 菜单栏支持展示特定后缀（如 `.txt`, `.pdf`）的系统默认打开应用，并能直接进行更改（通过选择 `.app`），且可灵活增删所关注的后缀
-- **菜单栏管理** - Dock 应用列表、自定义打开应用、文件默认打开方式、Finder 扩展启用状态一目了然
+- `Cmd+Shift+V` 打开跟随鼠标位置的历史面板
+- 支持文本、URL、文件组、图片和颜色
+- 搜索、类型过滤、固定、删除、复制和粘贴到先前应用
+- 可暂停记录，设置 1/7/30/90 天保留期和 100/500/1000 条上限
+- 可按应用排除记录；默认排除常见密码管理器
+- 忽略 transient/concealed 数据，图片与缩略图随历史记录一同清理
+- 单条文本上限 2 MiB，图片上限 5000 万像素/100 MiB，避免异常负载拖垮常驻进程
+
+剪贴板来源应用由检测到变化时的前台应用推断。立即粘贴需要辅助功能权限；未授权时仍可使用“复制”。
+
+### 菜单栏管理
+
+- Finder 扩展、辅助功能、快捷键冲突和开机自启状态
+- 打开/暂停剪贴板历史及隐私设置
+- 查看和修改指定后缀的系统默认打开应用
+- 添加/移除 Finder 右键菜单中的自定义应用
 
 ## 系统要求
 
-- macOS 14.0 (Sonoma) 及以上
-- Xcode 15+ (从源码构建时)
+- macOS 14.0 Sonoma 或更高版本
+- Xcode 15+ 与 XcodeGen（从源码构建）
 
 ## 安装
 
-### 从 Release 下载
+### Release
 
-1. 在 [Releases](../../releases) 页面下载最新 `.dmg` 文件
-2. 打开 DMG,将 `SuperCloudys.app` 拖入 `Applications` 文件夹
-3. 启动 `SuperCloudys.app`
-4. 在 **系统设置 > 登录项与扩展 > 添加的扩展** 中找到 SuperCloudys,启用 Finder 扩展
+从 [Releases](../../releases) 下载已签名并公证的 DMG，将 `SuperCloudys.app` 拖入 `/Applications`。
 
-### 从源码构建
+首次安装后：
 
-**前置依赖:**
+1. 在“系统设置 → 登录项与扩展 → 添加的扩展”启用 Finder 扩展。
+2. 如需窗口轮换和立即粘贴，在菜单栏点击“授予辅助功能权限…”。
+
+### 本地开发
 
 ```bash
 brew install xcodegen
 xcodegen generate
-```
-
-**推荐:一键脚本(签名稳定,TCC 权限不丢)**
-
-```bash
 ./scripts/install-local.sh
 ```
 
-脚本一次完成:**确保自签证书** → **Release 构建** → **替换 `~/Applications/SuperCloudys.app`** → **重启**。
+`install-local.sh` 使用长期自签证书安装到 `~/Applications`，因此本地重建不会反复丢失 TCC 权限。该证书仅用于本机开发，公开 Release 使用 Developer ID。
 
-- 首次运行会创建一个 10 年期的本地证书 `SuperCloudys Local Dev` 导入登录钥匙串(只导一次)
-- 因为签名身份固定,**辅助功能等 TCC 授权在每次重新 build 后都会保留**(adhoc 签名每次都会让 TCC 失效,这就是为什么需要稳定证书)
-- 首次安装后仍需在 **系统设置 > 隐私与安全性 > 辅助功能** 添加一次 SuperCloudys;之后所有迭代都不再需要
-
-**手动构建(适合 CI 风格):**
-
-```bash
-xcodebuild \
-  -project SuperCloudys.xcodeproj \
-  -scheme SuperCloudys \
-  -configuration Release \
-  build \
-  CODE_SIGN_IDENTITY="SuperCloudys Local Dev" \
-  CODE_SIGNING_REQUIRED=YES \
-  CODE_SIGNING_ALLOWED=YES \
-  CONFIGURATION_BUILD_DIR="$(pwd)/build"
-
-cp -R build/SuperCloudys.app ~/Applications/
-open ~/Applications/SuperCloudys.app
-pluginkit -e use -i com.yeshan333.SuperCloudys.FinderSyncExtension
-killall Finder
-```
-
-## 启用 Finder 扩展
-
-首次安装后需手动启用扩展:
-
-1. 打开 **系统设置**
-2. 进入 **登录项与扩展** > **添加的扩展**
-3. 找到 **SuperCloudys**,开启 Finder 扩展开关
-
-启用后在 Finder 中右键即可看到 SuperCloudys 菜单项。
-
-## 使用
-
-### 菜单栏
-
-启动后 SuperCloudys 以菜单栏图标形式运行,点击可以:
-
-- 查看 Finder 扩展启用状态(自动检测,无需手动刷新)
-- **查看 Dock 应用列表 + 对应的 Cmd 快捷键标记**
-- **启用/禁用 Cmd+1~0 全局快捷键**
-- **开机自启 Toggle**
-- **展示与修改特定后缀文件默认打开应用** - 列表展示特定后缀（如 `.txt`, `.pdf`）对应的默认打开应用及图标，点击后缀可选择新的应用（`.app`）设为默认打开方式，并能随时增减要关注的后缀
-- 添加/移除自定义打开应用
-- 快速跳转系统设置页面
-
-### 右键菜单
-
-在 Finder 中对文件或文件夹右键,菜单中会出现:
-
-- **通过 XXX 打开** - 已安装的内置应用(VSCode、Zed、Warp、Kaku)及自定义添加的应用
-- **复制路径** - 将选中项的完整路径复制到剪贴板
-
-### Dock 快捷键
-
-启动 SuperCloudys 后,Cmd+1 ~ Cmd+9、Cmd+0 自动映射到 Dock 中的前 10 个应用:
-
-- 按 **Cmd+N** 激活第 N 个应用;应用已在前台时,先依次轮换窗口(多窗口),全部轮换完后隐藏
-- Dock 顺序变化后 5 秒内自动重新绑定
-- 在菜单栏关闭"启用 Cmd+1~0 快捷键"Toggle 可整体禁用
-- 首次启动会弹窗请求 **辅助功能** 权限。在 **系统设置 > 隐私与安全性 > 辅助功能** 勾选 SuperCloudys 后,激活会通过 `AXUIElement` 直接 setFrontmost,**避免目标 App 弹出后被 macOS 14+ 焦点保护反弹**。不授权也能用,只是某些场景下目标 App 会被原前台 App 抢回焦点
-
-> ⚠️ Cmd+数字 是全局快捷键,会"抢走"其他 App 内的同款快捷键(如浏览器切换标签页)。如果按了 Cmd+N 目标 App 弹出后立刻被反弹,通常是 **另一个工具(如 Magnet、Rectangle 等)注册了相同热键** —— 在菜单栏关闭或退出冲突的工具即可。
-
-## 性能调优经验
-
-主应用的 UI 与后台轮询也经过了深度的性能压榨（极致顺滑体验）：
-1. **彻底消除主线程 I/O**：使用 `AppIconCache` 在 `Task.detached` 后台异步加载 App 图标并驱动 SwiftUI `Image`，菜单栏展开零掉帧。
-2. **后台大图处理**：剪贴板大图片的 PNG 压缩（极度耗时）完全放在专属后台串行队列处理，保证复制设计大图时主线程绝对不冻结。
-3. **事件驱动替代轮询**：废弃了每 5 秒轮询 Dock plist 的后台死循环，改用底层 `DispatchSourceFileSystemObject` 直接监听文件系统修改事件，实现了 0 更新 0 CPU 消耗。
-4. **GCD 后台定时器**：将剪贴板的 `NSPasteboard` 变化检测移除了 `RunLoop.main`，挂载到了专用的 `.utility` QoS 队列的 `DispatchSourceTimer` 上。
-5. **底层锁优化**：`CustomAppStore` 读写分离，分离 JSON 解码与 `NSLock` 的粒度边界，文件 I/O 均在锁外完成。
-
-如果遇到 Finder 右键卡顿,真凶常常**不在 SuperCloudys 本身**,而在其他启用的 Finder Sync 扩展(Finder 必须等所有扩展返回菜单才能显示)。可用项目自带的诊断脚本定位:
-
-```bash
-./scripts/diagnose_rightclick.sh
-```
-
-脚本会同时:
-1. 采样 Finder 主线程 3 秒
-2. 抓取 SuperCloudys 扩展的 `os_log` perf 数据
-3. 检查 `spindump` 慢响应报告
-
-排查命令:
-
-```bash
-# 列出所有启用的 Finder Sync 扩展
-pluginkit -m -p com.apple.FinderSync
-
-# 临时禁用某个可疑扩展
-pluginkit -e ignore -i <bundle.id>
-killall Finder
-```
-
-SuperCloudys 自身的 `menu(for:)` 实现已优化到 **稳态 < 0.5ms**(后台预构建 MenuSnapshot,主线程纯组装 NSMenu)。perf 日志默认 debug 级,需要时:
-
-```bash
-log stream --level debug --predicate 'subsystem == "com.yeshan333.SuperCloudys"'
-```
-
-## 测试
+手动测试：
 
 ```bash
 xcodegen generate
 xcodebuild test \
   -project SuperCloudys.xcodeproj \
   -scheme SuperCloudysTests \
-  -destination 'platform=macOS'
+  -destination "platform=macOS,arch=$(uname -m)"
 ```
 
-覆盖 `DockApp.shortcutLabel`、`DockReader.parseApps` 及窗口轮换逻辑的 20 个用例(含 Dock 含 spacer/separator tile 的回归测试及 Accessibility 守卫验证)。
+## 使用
 
-## 项目结构
+### Finder
 
-```
-SuperCloudys/
-├── project.yml                       # XcodeGen 项目配置
-├── SuperCloudys/                     # 主应用(菜单栏)
-│   ├── SuperCloudysApp.swift         # App 入口
-│   ├── MenuBarView.swift             # 菜单栏 UI
-│   ├── Dock/                         # Dock 快捷键功能
-│   │   ├── DockApp.swift             # 模型
-│   │   ├── DockReader.swift          # 解析 Dock plist
-│   │   ├── DockAppLauncher.swift     # launch/hide toggle + 窗口轮换
-│   │   ├── DockShortcutManager.swift # Carbon 全局快捷键注册
-│   │   ├── DockMonitor.swift         # 后台轮询 + 状态
-│   │   └── AccessibilityActivator.swift # AXUIElement 激活(绕焦点保护)
-│   ├── MenuBar/
-│   │   ├── DockAppsSection.swift     # 菜单栏 Dock 子区
-│   │   └── AppIconView.swift         # 异步图标视图
-│   ├── Services/
-│   │   ├── ExtensionStatus.swift     # Finder 扩展状态检测
-│   │   ├── LoginItemManager.swift    # 开机自启 (SMAppService)
-│   │   ├── AppIconCache.swift        # 图标后台缓存
-│   │   └── IconPrewarmer.swift       # 启动时预热 LaunchServices
-│   ├── Info.plist
-│   └── SuperCloudys.entitlements
-├── SuperCloudysExtension/            # Finder Sync 扩展
-│   ├── FinderSync.swift              # 扩展入口 (MenuSnapshot 预构建)
-│   ├── AppLocator.swift              # 应用定位检测
-│   ├── Actions/
-│   │   ├── OpenAppAction.swift       # 打开应用动作
-│   │   └── CopyPathAction.swift      # 复制路径动作
-│   ├── Info.plist
-│   └── SuperCloudysExtension.entitlements
-├── Shared/                           # 两个 Target 共享代码
-│   ├── Constants.swift               # 常量 & ExternalApp 模型
-│   ├── CustomAppStore.swift          # 自定义应用持久化(JSON, mtime 缓存)
-│   └── DockShortcutSettings.swift    # 快捷键启用状态
-├── SuperCloudysTests/                # 单元测试
-│   ├── DockAppTests.swift
-│   ├── DockReaderTests.swift
-│   └── WindowCycleTests.swift
-├── scripts/
-│   ├── install-local.sh              # 本地一键 build + 替换 + 重启(稳定签名)
-│   ├── create-dmg.sh                 # DMG 打包脚本
-│   ├── diagnose_rightclick.sh        # 右键卡顿诊断
-│   └── supercloudys-icon.svg         # App 图标源文件(改色调后用 rsvg-convert 重新导出)
-└── .github/workflows/
-    └── build.yml                     # CI: 自动构建 & 发布 DMG
-```
+选中文件或目录后打开右键菜单，选择“通过 … 打开”或“复制路径”。若菜单未出现，先确认 Finder 扩展已启用，再在菜单栏点击“刷新状态”。
 
-## CI/CD
+### Dock 快捷键
 
-项目使用 GitHub Actions 自动构建和发布:
+- 第一次按快捷键：启动或聚焦对应应用
+- 应用已在前台：依次轮换窗口，最后一次隐藏应用
+- 未授予辅助功能权限：启动/聚焦仍可用，窗口轮换会降级为隐藏
 
-- **推送 `v*` tag** 时自动触发构建,生成 DMG 并创建 GitHub Release
-- 支持 **手动触发**(Actions > Build & Package DMG > Run workflow)
+### 剪贴板面板
+
+- `↑` / `↓`：移动选择
+- `Return`：粘贴到打开面板前的应用
+- `Cmd+C`：复制选中条目
+- `Cmd+.`：固定/取消固定
+- `Cmd+Delete`：删除选中条目
+- `Tab` / `Shift+Tab`：切换类型过滤
+- `Esc`：关闭
+
+历史元数据位于 `~/Library/Application Support/SuperCloudys/clipboard_history.json`，图片位于同目录的 `ClipboardAssets`；文件仅对当前用户开放。
+
+## 架构
+
+- `SuperCloudys/`：菜单栏主应用、Dock 快捷键、剪贴板历史
+- `SuperCloudysExtension/`：沙盒化 Finder Sync 扩展
+- `Shared/`：主应用和扩展共享的模型及自定义应用配置
+- `project.yml`：XcodeGen 项目配置
+
+关键实现：
+
+- Carbon `RegisterEventHotKey` 注册全局快捷键
+- `DispatchSourceFileSystemObject` 监听 Dock plist
+- `.utility` GCD timer 监听 `NSPasteboard.changeCount`
+- 图片在剪贴板后台队列完成压缩和原子落盘后才发布到 UI
+- Finder 菜单使用带过期时间的后台快照，主线程只组装 `NSMenu`
+- JSON + 内存过滤覆盖默认 500 条历史；未引入数据库或第三方运行时依赖
+
+## 发布
+
+推送 `v*` tag 会运行测试、Developer ID 签名、DMG 公证和 GitHub Release。仓库需配置：
+
+- `DEVELOPER_ID_CERTIFICATE_BASE64`
+- `DEVELOPER_ID_CERTIFICATE_PASSWORD`
+- `DEVELOPER_ID_APPLICATION`
+- `KEYCHAIN_PASSWORD`
+- `APPLE_ID`
+- `APPLE_TEAM_ID`
+- `APPLE_APP_SPECIFIC_PASSWORD`
+
+版本由 tag 注入 `MARKETING_VERSION`，构建号使用 GitHub Actions run number。
 
 ```bash
-# 发布新版本
-git tag v1.4.0
-git push origin v1.4.0
+git tag v2.1.0
+git push origin v2.1.0
 ```
 
-## 技术实现
+## Finder 右键卡顿排查
 
-- **Finder Sync Extension** (`FIFinderSync`) 注入右键菜单项;`MenuSnapshot` 模式在后台 utility queue 预构建菜单数据(apps + icons + mtime),主线程 `menu(for:)` 仅做 NSMenu 组装,稳态 < 0.5ms
-- **Carbon `RegisterEventHotKey`** 注册 Cmd+1~0 全局快捷键(注册本身不需要 Accessibility 权限)
-- **激活策略双路径**:授权 Accessibility 后用 `AXUIElement` setFrontmost(绕 macOS 14+ 焦点保护) + `NSRunningApplication.activate()` 确保窗口切换到当前 Space;多窗口应用通过 `kAXWindowsAttribute` 枚举窗口并 `AXRaise` 实现轮换
-- **`CFPreferences` / `DispatchSourceFileSystemObject`** 解析并监听 Dock 配置变更（取代低效轮询）
-- **`SMAppService.mainApp`** 实现开机自启(macOS 13+)
-- **SwiftUI `MenuBarExtra`** 实现菜单栏管理界面
-- **主应用无沙盒**(Accessibility API 需要直接操作其他进程窗口);Finder 扩展仍保留独立沙盒
-- **XcodeGen** 管理项目配置,避免 `.xcodeproj` 冲突
-- 自定义应用配置通过 JSON 文件在主应用与扩展间共享,带 mtime 缓存避免重复磁盘读
+```bash
+./scripts/diagnose_rightclick.sh
+```
+
+Finder 会等待所有已启用的 Finder Sync 扩展返回菜单；卡顿不一定来自 SuperCloudys。诊断脚本会采样 Finder、检查扩展日志并读取 spindump。
 
 ## License
 

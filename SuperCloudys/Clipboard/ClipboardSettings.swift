@@ -1,13 +1,18 @@
 import Foundation
 
-final class ClipboardSettings {
+final class ClipboardSettings: @unchecked Sendable {
 
     static let shared = ClipboardSettings()
 
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
 
     private enum Keys {
         static let excludedApps = "clipboard_excludedApps"
+        static let includedApps = "clipboard_includedApps"
         static let retentionDays = "clipboard_retentionDays"
         static let isPaused = "clipboard_isPaused"
         static let maxEntries = "clipboard_maxEntries"
@@ -24,12 +29,17 @@ final class ClipboardSettings {
 
     var excludedApps: Set<String> {
         get {
-            if let arr = defaults.array(forKey: Keys.excludedApps) as? [String] {
-                return Set(arr)
-            }
-            return Self.defaultExcludedApps
+            let saved = Set(defaults.stringArray(forKey: Keys.excludedApps) ?? [])
+            let included = Set(defaults.stringArray(forKey: Keys.includedApps) ?? [])
+            return saved.union(Self.defaultExcludedApps).subtracting(included)
         }
-        set { defaults.set(Array(newValue), forKey: Keys.excludedApps) }
+        set {
+            defaults.set(Array(newValue), forKey: Keys.excludedApps)
+            defaults.set(
+                Array(Self.defaultExcludedApps.subtracting(newValue)),
+                forKey: Keys.includedApps
+            )
+        }
     }
 
     var retentionDays: Int {

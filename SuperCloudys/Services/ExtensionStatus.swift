@@ -1,76 +1,74 @@
 import AppKit
 import Combine
 
+@MainActor
 final class ExtensionStatus: ObservableObject {
-    @Published var isEnabled = false
+    @Published private(set) var isEnabled = false
+    @Published private(set) var lastError: String?
 
-    private var timer: Timer?
-    private var checkCount = 0
+    private var isChecking = false
 
     init() {
         checkStatus()
-        startAutoCheck()
-    }
-
-    deinit {
-        timer?.invalidate()
     }
 
     func checkStatus() {
-        let processRunning = checkProcessRunning()
-        let pluginEnabled = checkPluginKit()
-        DispatchQueue.main.async {
-            self.isEnabled = processRunning || pluginEnabled
+        guard !isChecking else { return }
+        isChecking = true
+        DispatchQueue.global(qos: .utility).async {
+            let result = Self.checkPluginKit()
+            DispatchQueue.main.async {
+                self.isEnabled = result.enabled
+                self.lastError = result.error
+                self.isChecking = false
+            }
         }
     }
 
     func openSystemSettings() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension") {
-            NSWorkspace.shared.open(url)
-        }
+        guard let url = URL(
+            string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension"
+        ) else { return }
+        NSWorkspace.shared.open(url)
     }
 
-    /// 启动后前 30 秒每 3 秒检测一次，之后每 15 秒检测一次
-    private func startAutoCheck() {
-        timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            self.checkCount += 1
-            self.checkStatus()
-            // 检测到已启用或已检测 10 次（30秒），切换为低频检测
-            if self.isEnabled || self.checkCount >= 10 {
-                self.timer?.invalidate()
-                self.timer = Timer.scheduledTimer(
-                    withTimeInterval: 15, repeats: true
-                ) { [weak self] _ in
-                    self?.checkStatus()
-                }
-            }
-        }
-    }
-
-    private func checkProcessRunning() -> Bool {
-        let apps = NSWorkspace.shared.runningApplications
-        return apps.contains { $0.bundleIdentifier == AppConstants.extensionBundleID }
-    }
-
-    private func checkPluginKit() -> Bool {
+    private nonisolated static func checkPluginKit() -> (enabled: Bool, error: String?) {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/pluginkit")
         task.arguments = ["-m", "-p", "com.apple.FinderSync"]
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        task.standardError = Pipe()
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        task.standardOutput = outputPipe
+        task.standardError = errorPipe
+
         do {
             try task.run()
-            task.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let output = String(data: data, encoding: .utf8) ?? ""
-            for line in output.components(separatedBy: "\n") {
-                if line.contains(AppConstants.extensionBundleID) {
-                    return line.hasPrefix("+")
-                }
+            let deadline = Date().addingTimeInterval(2)
+            while task.isRunning, Date() < deadline {
+                Thread.sleep(forTimeInterval: 0.02)
             }
-        } catch {}
-        return false
+            guard !task.isRunning else {
+                task.terminate()
+                return (false, "Finder 扩展状态查询超时")
+            }
+            let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
+            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+            let output = String(data: data, encoding: .utf8) ?? ""
+            let errorOutput = String(data: errorData, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard task.terminationStatus == 0 else {
+                let message = errorOutput.isEmpty
+                    ? "Finder 扩展状态查询失败（\(task.terminationStatus)）"
+                    : errorOutput
+                return (false, message)
+            }
+            let enabled = output.components(separatedBy: .newlines).contains { line in
+                let line = line.trimmingCharacters(in: .whitespaces)
+                return line.hasPrefix("+") && line.contains(AppConstants.extensionBundleID)
+            }
+            return (enabled, nil)
+        } catch {
+            return (false, error.localizedDescription)
+        }
     }
 }

@@ -2,6 +2,8 @@ import SwiftUI
 
 struct BottomBarView: View {
     let appName: String?
+    let canCopy: Bool
+    let canPaste: Bool
     let onPaste: () -> Void
     let onCopy: () -> Void
     let onClearUnpinned: () -> Void
@@ -20,6 +22,7 @@ struct BottomBarView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             }
             .buttonStyle(.plain)
+            .disabled(!canCopy)
 
             Button(action: onPaste) {
                 HStack(spacing: 6) {
@@ -36,6 +39,7 @@ struct BottomBarView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             }
             .buttonStyle(.plain)
+            .disabled(!canPaste)
 
             Rectangle()
                 .fill(Color.secondary.opacity(0.2))

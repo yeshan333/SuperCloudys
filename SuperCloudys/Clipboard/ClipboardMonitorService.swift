@@ -1,8 +1,13 @@
 import AppKit
+import ImageIO
 import os
 
 protocol ClipboardMonitorDelegate: AnyObject {
-    func clipboardMonitor(_ monitor: ClipboardMonitorService, didCapture entry: ClipboardEntry)
+    func clipboardMonitor(
+        _ monitor: ClipboardMonitorService,
+        didCapture entry: ClipboardEntry,
+        generation: Int
+    )
 }
 
 final class ClipboardMonitorService {
@@ -13,22 +18,37 @@ final class ClipboardMonitorService {
     private let log = Logger(subsystem: "com.yeshan333.SuperCloudys", category: "ClipboardMonitor")
     private let pollQueue = DispatchQueue(label: "com.yeshan333.SuperCloudys.clipboardPoll", qos: .utility)
     private var timer: DispatchSourceTimer?
+    private let stateLock = NSLock()
+    private var generation = 0
     private var lastChangeCount: Int
-    private var suppressUntil: Date?
+    private let suppressionLock = NSLock()
+    private var suppressedChangeRange: ClosedRange<Int>?
     private let settings: ClipboardSettings
+    private var lastFrontmostBundleID: String?
+    private var previousFrontmostBundleID: String?
+    private var frontmostChangedAt = Date.distantPast
     var assetsDirectory: URL?
+
+    private static let maxTextBytes = 2 * 1024 * 1024
+    private static let maxImagePixels: Int64 = 50_000_000
+    private static let maxImageBytes = 100 * 1024 * 1024
 
     init(settings: ClipboardSettings = .shared) {
         self.settings = settings
         self.lastChangeCount = pasteboard.changeCount
+        self.lastFrontmostBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
     }
 
     func start() {
+        stateLock.lock()
+        defer { stateLock.unlock() }
         guard timer == nil else { return }
+        generation += 1
+        let captureGeneration = generation
         let t = DispatchSource.makeTimerSource(queue: pollQueue)
         t.schedule(deadline: .now(), repeating: 0.5)
         t.setEventHandler { [weak self] in
-            self?.poll()
+            self?.poll(generation: captureGeneration)
         }
         t.resume()
         timer = t
@@ -36,34 +56,61 @@ final class ClipboardMonitorService {
     }
 
     func stop() {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        generation += 1
         timer?.cancel()
         timer = nil
         log.info("Clipboard monitor stopped")
     }
 
-    func markSelfWrite() {
-        suppressUntil = Date().addingTimeInterval(1.0)
+    func markSelfWrite(changeCount: Int) {
+        suppressionLock.lock()
+        suppressedChangeRange = changeCount...changeCount
+        suppressionLock.unlock()
+    }
+
+    func performSelfWrite(_ operation: () -> Bool) -> Bool {
+        suppressionLock.lock()
+        defer { suppressionLock.unlock() }
+
+        let start = pasteboard.changeCount
+        let success = operation()
+        let end = pasteboard.changeCount
+        if end > start {
+            suppressedChangeRange = (start + 1)...end
+        }
+        return success
     }
 
     // MARK: - Private
 
-    private func poll() {
+    private func poll(generation: Int) {
+        guard isCaptureValid(generation) else { return }
+        let sourceApp = NSWorkspace.shared.frontmostApplication
+        let sourceBundleID = sourceApp?.bundleIdentifier
+        let now = Date()
+        if sourceBundleID != lastFrontmostBundleID {
+            previousFrontmostBundleID = lastFrontmostBundleID
+            lastFrontmostBundleID = sourceBundleID
+            frontmostChangedAt = now
+        }
+
         let current = pasteboard.changeCount
         guard current != lastChangeCount else { return }
         defer { lastChangeCount = current }
 
-        if let until = suppressUntil, Date() < until {
-            return
-        }
-        suppressUntil = nil
+        if consumeSuppressedChangeCount(current) { return }
 
         guard let items = pasteboard.pasteboardItems, !items.isEmpty else { return }
 
-        let sourceApp = NSWorkspace.shared.frontmostApplication
-        let sourceBundleID = sourceApp?.bundleIdentifier
         let sourceAppName = sourceApp?.localizedName
 
-        if let bundleID = sourceBundleID, settings.isAppExcluded(bundleID) {
+        if shouldExclude(
+            sourceBundleID: sourceBundleID,
+            previousBundleID: previousFrontmostBundleID,
+            secondsSinceSwitch: now.timeIntervalSince(frontmostChangedAt)
+        ) {
             return
         }
 
@@ -71,11 +118,28 @@ final class ClipboardMonitorService {
             return
         }
 
-        guard let entry = decode(items: items, sourceBundleID: sourceBundleID, sourceAppName: sourceAppName) else {
+        guard let entry = decode(sourceBundleID: sourceBundleID, sourceAppName: sourceAppName) else {
             return
         }
 
-        delegate?.clipboardMonitor(self, didCapture: entry)
+        delegate?.clipboardMonitor(self, didCapture: entry, generation: generation)
+    }
+
+    func isCaptureValid(_ captureGeneration: Int) -> Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return timer != nil && generation == captureGeneration
+    }
+
+    func shouldExclude(
+        sourceBundleID: String?,
+        previousBundleID: String?,
+        secondsSinceSwitch: TimeInterval
+    ) -> Bool {
+        if let sourceBundleID, settings.isAppExcluded(sourceBundleID) { return true }
+        // ponytail: one polling interval of false positives is safer than storing a switched-away password.
+        return secondsSinceSwitch < 0.75
+            && previousBundleID.map(settings.isAppExcluded) == true
     }
 
     private func hasTransientTypes(_ items: [NSPasteboardItem]) -> Bool {
@@ -96,7 +160,6 @@ final class ClipboardMonitorService {
     }
 
     private func decode(
-        items: [NSPasteboardItem],
         sourceBundleID: String?,
         sourceAppName: String?
     ) -> ClipboardEntry? {
@@ -116,8 +179,8 @@ final class ClipboardMonitorService {
             if !fileURLs.isEmpty {
                 let paths = fileURLs.map(\.path)
                 let title = fileURLs.count == 1
-                    ? (fileURLs.first?.lastPathComponent ?? "File")
-                    : "\(fileURLs.count) files"
+                    ? (fileURLs.first?.lastPathComponent ?? "文件")
+                    : "\(fileURLs.count) 个文件"
                 return makeEntry(
                     type: .fileGroup,
                     plainText: paths.joined(separator: "\n"),
@@ -143,33 +206,43 @@ final class ClipboardMonitorService {
             )
         }
 
-        // Try image
-        if let images = pasteboard.readObjects(forClasses: [NSImage.self], options: nil) as? [NSImage],
-           let image = images.first {
-            let title = imageSizeDescription(image)
-            let paths = saveImage(image)
+        // Prefer encoded image data so large images are not decoded just to be stored again.
+        let imagePayload: (data: Data, fileExtension: String)? = {
+            if let data = pasteboard.data(forType: .png) { return (data, "png") }
+            if let data = pasteboard.data(forType: .tiff) { return (data, "tiff") }
+            guard let image = (pasteboard.readObjects(
+                forClasses: [NSImage.self], options: nil
+            ) as? [NSImage])?.first,
+                  let data = image.tiffRepresentation else { return nil }
+            return (data, "tiff")
+        }()
+        if let imagePayload {
+            guard let saved = saveImageData(
+                imagePayload.data,
+                fileExtension: imagePayload.fileExtension
+            ) else { return nil }
             return makeEntry(
                 type: .image,
                 plainText: nil,
-                title: title,
+                title: "图片 \(saved.width)×\(saved.height)",
                 sourceBundleID: sourceBundleID,
                 sourceAppName: sourceAppName,
-                imagePath: paths.original,
-                thumbnailPath: paths.thumbnail
+                imagePath: saved.original,
+                thumbnailPath: saved.thumbnail,
+                fingerprint: saved.fingerprint
             )
         }
 
         // Try text (richText check via RTF presence)
         if let text = pasteboard.string(forType: .string), !text.isEmpty {
-            let hasRTF = pasteboard.data(forType: .rtf) != nil
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            let type: ClipboardContentType
-            if !hasRTF, detectedWebURL(in: trimmed) != nil {
-                type = .url
-            } else {
-                type = hasRTF ? .richText : .text
+            guard text.utf8.count <= Self.maxTextBytes else {
+                log.warning("Skipped clipboard text larger than \(Self.maxTextBytes) bytes")
+                return nil
             }
-            let title = String(trimmed.prefix(100))
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            // ponytail: rich text was never restored; keep new entries honest and store plain text.
+            let type: ClipboardContentType = detectedWebURL(in: trimmed) != nil ? .url : .text
+            let title = trimmed.isEmpty ? "空白文本" : String(trimmed.prefix(100))
             return makeEntry(
                 type: type,
                 plainText: text,
@@ -206,7 +279,8 @@ final class ClipboardMonitorService {
         filePaths: [String]? = nil,
         colorHex: String? = nil,
         imagePath: String? = nil,
-        thumbnailPath: String? = nil
+        thumbnailPath: String? = nil,
+        fingerprint: String? = nil
     ) -> ClipboardEntry {
         ClipboardEntry(
             id: UUID(),
@@ -219,7 +293,7 @@ final class ClipboardMonitorService {
             sourceAppName: sourceAppName,
             isPinned: false,
             lastUsedAt: nil,
-            fingerprint: ClipboardEntry.fingerprint(type: type, content: plainText ?? imagePath),
+            fingerprint: fingerprint ?? ClipboardEntry.fingerprint(type: type, content: plainText ?? imagePath),
             imagePath: imagePath,
             thumbnailPath: thumbnailPath,
             filePaths: filePaths,
@@ -227,48 +301,81 @@ final class ClipboardMonitorService {
         )
     }
 
-    private static let imageQueue = DispatchQueue(label: "com.yeshan333.SuperCloudys.imageSave")
+    private func saveImageData(
+        _ data: Data,
+        fileExtension: String
+    ) -> (original: String, thumbnail: String?, fingerprint: String, width: Int, height: Int)? {
+        guard let dir = assetsDirectory else { return nil }
+        return autoreleasepool {
+            guard data.count <= Self.maxImageBytes else {
+                log.warning("Skipped clipboard image larger than \(Self.maxImageBytes) bytes")
+                return nil
+            }
+            guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+                  let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil)
+                    as? [CFString: Any],
+                  let width = (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue,
+                  let height = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue,
+                  width > 0, height > 0 else { return nil }
+            let (pixelCount, overflow) = Int64(width).multipliedReportingOverflow(
+                by: Int64(height)
+            )
+            guard !overflow, pixelCount <= Self.maxImagePixels else {
+                log.warning("Skipped clipboard image with \(pixelCount) pixels")
+                return nil
+            }
+            let fingerprint = ClipboardEntry.fingerprint(type: .image, data: data)
 
-    private func saveImage(_ image: NSImage) -> (original: String?, thumbnail: String?) {
-        guard let dir = assetsDirectory else { return (nil, nil) }
-        let id = UUID().uuidString
-        let originalURL = dir.appendingPathComponent("\(id).png")
-        let thumbURL = dir.appendingPathComponent("\(id)_thumb.png")
+            let id = UUID().uuidString
+            let originalURL = dir.appendingPathComponent("\(id).\(fileExtension)")
+            let thumbURL = dir.appendingPathComponent("\(id)_thumb.png")
 
-        Self.imageQueue.async {
-            guard let tiffData = image.tiffRepresentation,
-                  let bitmap = NSBitmapImageRep(data: tiffData),
-                  let pngData = bitmap.representation(using: .png, properties: [:]) else {
-                return
+            do {
+                try data.write(to: originalURL, options: .atomic)
+                restrictPermissions(for: originalURL)
+            } catch {
+                log.error("Cannot save clipboard image: \(error.localizedDescription, privacy: .public)")
+                return nil
             }
 
-            try? pngData.write(to: originalURL)
-
-            let imageSize = image.size
-            let thumbMaxDim: CGFloat = 320
-            let scale = min(thumbMaxDim / imageSize.width, thumbMaxDim / imageSize.height, 1.0)
-            let w = Int(imageSize.width * scale)
-            let h = Int(imageSize.height * scale)
-
-            guard let cgImage = bitmap.cgImage,
-                  let ctx = CGContext(
-                      data: nil, width: w, height: h,
-                      bitsPerComponent: 8, bytesPerRow: 0,
-                      space: CGColorSpaceCreateDeviceRGB(),
-                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-                  ) else { return }
-
-            ctx.interpolationQuality = .high
-            ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: w, height: h))
-            guard let thumbCG = ctx.makeImage() else { return }
-
-            let thumbRep = NSBitmapImageRep(cgImage: thumbCG)
-            if let thumbPng = thumbRep.representation(using: .png, properties: [:]) {
-                try? thumbPng.write(to: thumbURL)
+            var thumbnailPath: String?
+            if max(width, height) > 320,
+               let thumbCG = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                   kCGImageSourceCreateThumbnailFromImageAlways: true,
+                   kCGImageSourceCreateThumbnailWithTransform: true,
+                   kCGImageSourceThumbnailMaxPixelSize: 320
+               ] as CFDictionary),
+               let thumbPng = NSBitmapImageRep(cgImage: thumbCG)
+                   .representation(using: .png, properties: [:]) {
+                do {
+                    try thumbPng.write(to: thumbURL, options: .atomic)
+                    restrictPermissions(for: thumbURL)
+                    thumbnailPath = thumbURL.path
+                } catch {
+                    log.error("Cannot save clipboard thumbnail: \(error.localizedDescription, privacy: .public)")
+                }
             }
+
+            return (
+                originalURL.path,
+                thumbnailPath,
+                fingerprint,
+                width,
+                height
+            )
         }
+    }
 
-        return (originalURL.path, thumbURL.path)
+    func consumeSuppressedChangeCount(_ current: Int) -> Bool {
+        suppressionLock.lock()
+        defer { suppressionLock.unlock() }
+        guard let range = suppressedChangeRange else { return false }
+        if current <= range.upperBound {
+            if current == range.upperBound { suppressedChangeRange = nil }
+            return true
+        }
+        suppressedChangeRange = nil
+        return false
     }
 
     private func colorToHex(_ color: NSColor) -> String {
@@ -276,11 +383,20 @@ final class ClipboardMonitorService {
         let r = Int(rgb.redComponent * 255)
         let g = Int(rgb.greenComponent * 255)
         let b = Int(rgb.blueComponent * 255)
-        return String(format: "#%02X%02X%02X", r, g, b)
+        let a = Int(rgb.alphaComponent * 255)
+        return a < 255
+            ? String(format: "#%02X%02X%02X%02X", r, g, b, a)
+            : String(format: "#%02X%02X%02X", r, g, b)
     }
 
-    private func imageSizeDescription(_ image: NSImage) -> String {
-        let size = image.size
-        return "Image \(Int(size.width))×\(Int(size.height))"
+    private func restrictPermissions(for url: URL) {
+        do {
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o600],
+                ofItemAtPath: url.path
+            )
+        } catch {
+            log.warning("Cannot restrict clipboard image permissions: \(error.localizedDescription, privacy: .public)")
+        }
     }
 }

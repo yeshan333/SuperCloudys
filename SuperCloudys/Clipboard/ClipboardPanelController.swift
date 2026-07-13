@@ -7,6 +7,7 @@ final class ClipboardPanelController {
     static let shared = ClipboardPanelController()
 
     private var panel: NSPanel?
+    private var resignObserver: NSObjectProtocol?
     private let historyController = ClipboardHistoryController.shared
 
     var isVisible: Bool { panel?.isVisible ?? false }
@@ -27,8 +28,7 @@ final class ClipboardPanelController {
         }
         guard let panel else { return }
 
-        let mouseLoc = NSEvent.mouseLocation
-        panel.setFrameTopLeftPoint(mouseLoc)
+        position(panel, near: NSEvent.mouseLocation)
         panel.makeKeyAndOrderFront(nil)
         
         historyController.isPanelVisible = true
@@ -54,6 +54,7 @@ final class ClipboardPanelController {
             defer: false
         )
         panel.isFloatingPanel = true
+        panel.isReleasedWhenClosed = false
         panel.level = .floating
         panel.becomesKeyOnlyIfNeeded = false
         panel.titleVisibility = .hidden
@@ -81,14 +82,26 @@ final class ClipboardPanelController {
         hostingView.autoresizingMask = [.width, .height]
         panel.contentView?.addSubview(hostingView)
 
-        NotificationCenter.default.addObserver(
+        resignObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.didResignKeyNotification,
             object: panel,
             queue: .main
         ) { [weak self] _ in
-            self?.hide()
+            Task { @MainActor in self?.hide() }
         }
 
         self.panel = panel
+    }
+
+    private func position(_ panel: NSPanel, near point: NSPoint) {
+        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(point, $0.frame, false) })
+            ?? NSScreen.main else { return }
+        let visible = screen.visibleFrame
+        var frame = panel.frame
+        frame.size.width = min(frame.width, visible.width)
+        frame.size.height = min(frame.height, visible.height)
+        frame.origin.x = min(max(point.x, visible.minX), visible.maxX - frame.width)
+        frame.origin.y = min(max(point.y - frame.height, visible.minY), visible.maxY - frame.height)
+        panel.setFrame(frame, display: false)
     }
 }

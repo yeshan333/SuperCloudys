@@ -16,13 +16,14 @@ struct SearchBarView: View {
                     .foregroundColor(.secondary)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("关闭剪贴板历史")
 
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 16, weight: .medium))
                     .foregroundColor(.secondary)
 
-                TextField("搜索剪切板...", text: $query)
+                TextField("搜索剪贴板...", text: $query)
                     .textFieldStyle(.plain)
                     .font(.system(size: 18, weight: .regular))
                     .focused($isSearchFocused)
@@ -32,13 +33,14 @@ struct SearchBarView: View {
             .background(Color.secondary.opacity(0.1))
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-            Picker("", selection: $typeFilter) {
+            Picker("内容类型", selection: $typeFilter) {
                 Text("全部类型").tag(nil as ClipboardContentType?)
-                ForEach(ClipboardContentType.allCases, id: \.self) { type in
+                ForEach(ClipboardContentType.filterCases, id: \.self) { type in
                     Text(type.displayName).tag(type as ClipboardContentType?)
                 }
             }
             .pickerStyle(.menu)
+            .labelsHidden()
             .frame(width: 120)
             .padding(.leading, 4)
         }
@@ -49,7 +51,7 @@ struct SearchBarView: View {
                 isSearchFocused = true
             }
         }
-        .onChange(of: isVisible) { visible in
+        .onChange(of: isVisible) { _, visible in
             if visible {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     isSearchFocused = true
@@ -60,10 +62,12 @@ struct SearchBarView: View {
 }
 
 extension ClipboardContentType {
+    static let filterCases: [ClipboardContentType] = [.text, .url, .fileGroup, .image, .color]
+
     var displayName: String {
         switch self {
         case .text: return "文本"
-        case .richText: return "富文本"
+        case .richText: return "文本"
         case .url: return "链接"
         case .fileGroup: return "文件"
         case .image: return "图片"

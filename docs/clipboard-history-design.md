@@ -95,7 +95,7 @@ Raycast 强调快捷键驱动：
 - Return 粘贴或复制
 - 键盘操作支持置顶、重命名、删除、批量删除、类型过滤
 
-核心要求是：剪贴板历史只有在调用和选择都低摩擦时才有用。SuperCloudys 已使用 Carbon 快捷键，新功能使用 `Ctrl+H` 作为全局快捷键，集成到同一全局快捷键注册模型中。
+核心要求是：剪贴板历史只有在调用和选择都低摩擦时才有用。SuperCloudys 已使用 Carbon 快捷键，新功能使用 `Cmd+Shift+V` 作为全局快捷键，集成到同一全局快捷键注册模型中。
 
 ### 从历史粘贴
 
@@ -317,7 +317,7 @@ SuperCloudys/Clipboard/
 ├── ClipboardStore.swift              # JSON 持久化（防抖写入）
 ├── ClipboardHistoryController.swift  # 业务协调（@MainActor）
 ├── ClipboardPanelController.swift    # NSPanel 管理
-├── ClipboardHotkeyManager.swift      # Carbon Ctrl+H 全局快捷键
+├── ClipboardHotkeyManager.swift      # Carbon Cmd+Shift+V 全局快捷键
 ├── ClipboardSettings.swift           # 设置/隐私配置
 └── Views/
     ├── ClipboardHistoryView.swift    # 主视图
@@ -405,14 +405,21 @@ let appName = frontmost?.localizedName
 
 ### 剪贴板监听服务
 
-自写抑制采用**时间窗口方式**（1 秒），而非单次 changeCount+1。原因：`clearContents()` + `writeObjects()` 会递增 changeCount 两次，基于计数的方式无法可靠覆盖。
+自写抑制记录一次写入覆盖的**精确 changeCount 区间**。锁覆盖 `clearContents()` 和实际写入，因此轮询线程即使读到中间计数，也会等到区间确定后再判断；不会吞掉一秒内来自其他应用的真实复制。
 
 ```swift
 final class ClipboardMonitorService {
-    private var suppressUntil: Date?
+    private let suppressionLock = NSLock()
+    private var suppressedChangeRange: ClosedRange<Int>?
 
-    func markSelfWrite() {
-        suppressUntil = Date().addingTimeInterval(1.0)
+    func performSelfWrite(_ operation: () -> Bool) -> Bool {
+        suppressionLock.lock()
+        defer { suppressionLock.unlock() }
+        let start = pasteboard.changeCount
+        let success = operation()
+        let end = pasteboard.changeCount
+        if end > start { suppressedChangeRange = (start + 1)...end }
+        return success
     }
 
     private func poll() {
@@ -420,10 +427,7 @@ final class ClipboardMonitorService {
         guard current != lastChangeCount else { return }
         defer { lastChangeCount = current }
 
-        if let until = suppressUntil, Date() < until {
-            return
-        }
-        suppressUntil = nil
+        if consumeSuppressedChangeCount(current) { return }
         // 解码、过滤、去重、通知 delegate
     }
 }
@@ -440,7 +444,7 @@ final class ClipboardMonitorService {
 - `NSPanel` — 启动器风格的历史窗口
 - `NSVisualEffectView` — 背景毛玻璃模糊效果（深色半透明）
 - `NSHostingView` + SwiftUI 内容
-- 复用已有 Carbon 全局快捷键基础设施（`Ctrl+H` 触发）
+- 复用已有 Carbon 全局快捷键基础设施（`Cmd+Shift+V` 触发）
 
 面板特性：
 
@@ -546,7 +550,7 @@ final class ClipboardMonitorService {
 
 #### 面板尺寸与样式
 
-- 默认尺寸：宽 780pt × 高 500pt
+- 默认尺寸：宽 800pt × 高 560pt，并限制在当前屏幕可见区域内
 - 圆角：12pt
 - 背景：`NSVisualEffectView`（`.hudWindow` 或 `.popover` material，深色模式）
 - 无标题栏（`styleMask: [.borderless]`）
@@ -612,9 +616,9 @@ final class ClipboardMonitorService {
 
 现有 `Cmd+1...0` 已用于 Dock 应用快捷键。剪贴板历史需要单独的调用快捷键。
 
-**全局快捷键：`Ctrl+H`**
+**全局快捷键：`Cmd+Shift+V`**
 
-- 按下 `Ctrl+H` 打开/关闭剪贴板历史面板
+- 按下 `Cmd+Shift+V` 打开/关闭剪贴板历史面板
 - 不与现有 `Cmd+1...0` 冲突
 - 简短易记，符合"History"语义
 - 避免与 macOS 系统快捷键 `Cmd+H`（隐藏窗口）冲突
@@ -753,6 +757,8 @@ final class ClipboardMonitorService {
 - [x] 按 Bundle ID 的应用排除列表
 - [x] 保留策略（自动过期）
 - [x] 图片缩略图存储到磁盘
+- [x] UI 类型过滤器与键盘循环
+- [x] 暂停记录、保留期限、容量上限与应用排除设置
 
 ### 延后的完整功能集
 
@@ -761,9 +767,7 @@ final class ClipboardMonitorService {
 - `粘贴为原始富文本`
 - 条目重命名
 - 按时间窗口批量删除
-- UI 中的类型过滤器
 - 片段转换
-- 暂停记录
 - 忽略下一次复制
 - Universal Clipboard 过滤开关
 - 图片 OCR
@@ -788,7 +792,7 @@ final class ClipboardMonitorService {
 
 ### 推荐面板工作流
 
-1. `Ctrl+H` 打开面板，记录当前前台应用
+1. `Cmd+Shift+V` 打开面板，记录当前前台应用
 2. 搜索框自动获焦，可直接输入过滤
 3. 方向键上下移动选择，右侧实时更新预览和 Information
 4. `Return` 粘贴选中条目到之前的前台应用
@@ -818,8 +822,10 @@ final class ClipboardActionController {
     }
 
     func restore(_ entry: ClipboardEntry, monitor: ClipboardMonitorService, paste: Bool) {
-        monitor.markSelfWrite()
-        write(entry)
+        monitor.performSelfWrite {
+            write(entry)
+            return true
+        }
 
         guard paste, let previousApp else { return }
         previousApp.activate()
@@ -856,7 +862,7 @@ final class ClipboardActionController {
 
 SuperCloudys 的最佳实现路径：
 
-1. **围绕定时器轮询、类型化解码、SQLite 持久化和 NSPanel 搜索 UI 构建稳健 MVP**
+1. **围绕定时器轮询、类型化解码、JSON 持久化和 NSPanel 搜索 UI 构建稳健 MVP**；仅在数据量实测超出内存方案时再引入 SQLite
 2. **保留足够的原始表示数据**，避免将应用局限于纯文本角落
 3. **将隐私和自写抑制视为核心架构关注点**（Day 1 就要做对）
 4. **将"立即粘贴"作为在可靠"复制回"之上的能力层**

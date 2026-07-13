@@ -1,6 +1,7 @@
 import XCTest
 @testable import SuperCloudys
 
+@MainActor
 final class WindowCycleTests: XCTestCase {
 
     // MARK: - AccessibilityActivator guards

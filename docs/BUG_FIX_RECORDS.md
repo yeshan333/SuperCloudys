@@ -26,7 +26,7 @@ This guarantees the visual order and the array order are 100% identical.
 **Root Cause:** SwiftUI's `@FocusState` requires the hosting window to be the active Key Window. When `makeKeyAndOrderFront` is called, the window might still be animating or transitioning. Setting the focus state instantly gets ignored by the system.
 **Fix:** Wrapped the `isSearchFocused = true` assignment in `DispatchQueue.main.asyncAfter(deadline: .now() + 0.1)` inside both `.onAppear` and `.onChange`. The 0.1s delay ensures the window is ready to accept keyboard focus.
 
-## 5. App Launch Silently Failing on First Install (Missing Accessibility Prompt)
-**Issue:** When a user installed the app for the very first time, the core features (`Cmd+Number`, `Ctrl+H` pasting) did not work, and the user had no feedback on what was wrong.
-**Root Cause:** SuperCloudys is a menu bar app (`LSUIElement`). It does not show a main window on launch. Furthermore, it relied on Accessibility permissions (AX API) but never explicitly prompted the user for them.
-**Fix:** Added an asynchronous call to `AccessibilityActivator.requestTrust()` inside `SuperCloudysApp.init()`. This proactively triggers the macOS system dialog "SuperCloudys would like to control this computer using accessibility features" on the first launch, guiding the user to grant necessary permissions.
+## 5. Accessibility Permission Had No Visible Recovery Path
+**Issue:** Window cycling and direct clipboard paste could fail without explaining that Accessibility permission was missing.
+**Root Cause:** SuperCloudys is an `LSUIElement` app with no main window, while permission prompting happened independently of the feature the user was trying to use.
+**Fix:** The menu now shows live Accessibility state and a user-initiated permission/settings action. Direct paste stays disabled until permission is present; ordinary copy and app launching continue to work without it.
