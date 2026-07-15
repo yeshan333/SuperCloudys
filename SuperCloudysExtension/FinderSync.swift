@@ -8,14 +8,24 @@ class FinderSync: FIFinderSync, @unchecked Sendable {
     private struct MenuSnapshot {
         let apps: [ExternalApp]
         let icons: [String: NSImage]
-        let customAppsMTime: Date?
-        let createdAt: Date
     }
     private let snapshotLock = NSLock()
     private var snapshot: MenuSnapshot?
     private var isRebuildingSnapshot = false
+    private let refreshQueue = DispatchQueue(
+        label: "com.yeshan333.SuperCloudys.menu-refresh",
+        qos: .utility
+    )
+    private var customAppsSource: DispatchSourceFileSystemObject?
+    private var appsByTag: [Int: ExternalApp] = [:]
+    private var tagsByPath: [String: Int] = [:]
+    private var nextAppTag = 1
 
     private static let log = Logger(subsystem: "com.yeshan333.SuperCloudys", category: "perf")
+    private static let copyPathIcon = NSImage(
+        systemSymbolName: "doc.on.doc",
+        accessibilityDescription: nil
+    )
 
     override init() {
         super.init()
@@ -23,6 +33,11 @@ class FinderSync: FIFinderSync, @unchecked Sendable {
             URL(fileURLWithPath: "/")
         ]
         rebuildSnapshotInBackground()
+        startMonitoringCustomApps()
+    }
+
+    deinit {
+        customAppsSource?.cancel()
     }
 
     override func beginObservingDirectory(at url: URL) {
@@ -45,11 +60,7 @@ class FinderSync: FIFinderSync, @unchecked Sendable {
                 action: #selector(handleOpenApp(_:)),
                 keyEquivalent: ""
             )
-            item.representedObject = [
-                "name": app.name,
-                "bundleID": app.bundleID,
-                "appPath": app.appPath
-            ]
+            item.tag = tag(for: app)
             item.image = icons[app.appPath]
             menu.addItem(item)
         }
@@ -63,8 +74,7 @@ class FinderSync: FIFinderSync, @unchecked Sendable {
             action: #selector(handleCopyPath(_:)),
             keyEquivalent: ""
         )
-        copyPathItem.image = NSImage(systemSymbolName: "doc.on.doc",
-                                     accessibilityDescription: nil)
+        copyPathItem.image = Self.copyPathIcon
         menu.addItem(copyPathItem)
 
         let totalMs = Date().timeIntervalSince(menuStart) * 1000
@@ -76,14 +86,15 @@ class FinderSync: FIFinderSync, @unchecked Sendable {
 
     @objc func handleOpenApp(_ sender: NSMenuItem) {
         let urls = resolveTargetURLs()
-        guard !urls.isEmpty else { return }
-        guard let value = sender.representedObject as? [String: String],
-              let name = value["name"], let bundleID = value["bundleID"],
-              let appPath = value["appPath"] else { return }
-        OpenAppAction.execute(
-            app: ExternalApp(name: name, bundleID: bundleID, appPath: appPath),
-            urls: urls
-        )
+        guard !urls.isEmpty else {
+            Self.log.error("Open action has no Finder target")
+            return
+        }
+        guard let app = appsByTag[sender.tag] else {
+            Self.log.error("Open action has unknown app tag \(sender.tag)")
+            return
+        }
+        OpenAppAction.execute(app: app, urls: urls)
     }
 
     @objc func handleCopyPath(_ sender: NSMenuItem) {
@@ -94,35 +105,30 @@ class FinderSync: FIFinderSync, @unchecked Sendable {
 
     // MARK: - Snapshot pipeline
 
-    /// 命中时返回快照；失效时先返回旧快照并后台刷新，仅冷启动同步构建。
-    private func resolveMenuData() -> ([ExternalApp], [String: NSImage], Bool) {
-        let currentMTime = CustomAppStore.fileMTime()
+    private func tag(for app: ExternalApp) -> Int {
+        if let tag = tagsByPath[app.appPath] {
+            appsByTag[tag] = app
+            return tag
+        }
+        let tag = nextAppTag
+        nextAppTag += 1
+        tagsByPath[app.appPath] = tag
+        appsByTag[tag] = app
+        return tag
+    }
 
+    /// 热路径只读内存；自定义应用变更由文件事件在后台刷新。
+    private func resolveMenuData() -> ([ExternalApp], [String: NSImage], Bool) {
         snapshotLock.lock()
         let snap = snapshot
         snapshotLock.unlock()
 
-        if let snap, snap.customAppsMTime != currentMTime {
-            let apps = computeAppList()
-            rebuildSnapshotInBackground()
-            return (apps, snap.icons, false)
-        }
-
-        if let snap,
-           snap.customAppsMTime == currentMTime,
-           Date().timeIntervalSince(snap.createdAt) < 60 {
+        if let snap {
             return (snap.apps, snap.icons, true)
         }
 
-        if let snap {
-            rebuildSnapshotInBackground()
-            return (snap.apps, snap.icons, false)
-        }
-
         // 冷启动只同步解析应用列表；图标由已启动的后台快照任务加载。
-        let apps = computeAppList()
-        rebuildSnapshotInBackground()
-        return (apps, [:], false)
+        return (computeAppList(), [:], false)
     }
 
     private func rebuildSnapshotInBackground() {
@@ -134,18 +140,13 @@ class FinderSync: FIFinderSync, @unchecked Sendable {
         isRebuildingSnapshot = true
         snapshotLock.unlock()
 
-        DispatchQueue.global(qos: .utility).async { [weak self] in
+        refreshQueue.async { [weak self] in
             guard let self else { return }
             let t0 = Date()
             let apps = self.computeAppList()
             let icons = self.loadIcons(for: apps)
-            let mtime = CustomAppStore.fileMTime()
-            let snap = MenuSnapshot(
-                apps: apps,
-                icons: icons,
-                customAppsMTime: mtime,
-                createdAt: Date()
-            )
+            _ = Self.copyPathIcon
+            let snap = MenuSnapshot(apps: apps, icons: icons)
             self.snapshotLock.lock()
             self.snapshot = snap
             self.isRebuildingSnapshot = false
@@ -153,6 +154,61 @@ class FinderSync: FIFinderSync, @unchecked Sendable {
             let ms = Date().timeIntervalSince(t0) * 1000
             Self.log.debug("snapshot rebuilt in \(ms, format: .fixed(precision: 1)) ms apps=\(apps.count)")
         }
+    }
+
+    private func startMonitoringCustomApps() {
+        refreshQueue.async { [weak self] in
+            self?.monitorCustomAppsFile()
+        }
+    }
+
+    private func monitorCustomAppsFile() {
+        customAppsSource?.cancel()
+
+        let fileURL = CustomAppStore.fileURL
+        let fileDescriptor = open(fileURL.path, O_EVTONLY)
+        if fileDescriptor == -1 {
+            monitorCustomAppsDirectory(fileURL.deletingLastPathComponent())
+            return
+        }
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fileDescriptor,
+            eventMask: [.write, .delete, .rename],
+            queue: refreshQueue
+        )
+        source.setEventHandler { [weak self] in
+            guard let self else { return }
+            let events = self.customAppsSource?.data
+            self.rebuildSnapshotInBackground()
+            if events?.contains(.delete) == true || events?.contains(.rename) == true {
+                self.monitorCustomAppsFile()
+            }
+        }
+        source.setCancelHandler { close(fileDescriptor) }
+        source.resume()
+        customAppsSource = source
+    }
+
+    private func monitorCustomAppsDirectory(_ directoryURL: URL) {
+        let fileDescriptor = open(directoryURL.path, O_EVTONLY)
+        guard fileDescriptor != -1 else { return }
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fileDescriptor,
+            eventMask: .write,
+            queue: refreshQueue
+        )
+        source.setEventHandler { [weak self] in
+            guard FileManager.default.fileExists(atPath: CustomAppStore.fileURL.path) else {
+                return
+            }
+            self?.monitorCustomAppsFile()
+            self?.rebuildSnapshotInBackground()
+        }
+        source.setCancelHandler { close(fileDescriptor) }
+        source.resume()
+        customAppsSource = source
     }
 
     private func computeAppList() -> [ExternalApp] {

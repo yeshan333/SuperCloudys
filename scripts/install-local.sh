@@ -135,6 +135,7 @@ install_and_launch() {
   sleep 1
   if pgrep -xf "$dst/Contents/MacOS/SuperCloudys" >/dev/null; then
     rm -rf "$backup"
+    killall Finder 2>/dev/null || true
     echo "✓ SuperCloudys is running from $dst"
   else
     rm -rf "$dst"

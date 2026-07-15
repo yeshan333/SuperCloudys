@@ -1,7 +1,7 @@
 #!/bin/bash
 # 测量 Finder 右键卡顿:同时 sample Finder 主线程 + 抓 SuperCloudys 扩展 perf log
 # 用法: ./diagnose_rightclick.sh
-# 流程: 倒计时 3 秒 -> 你立刻在 Finder 右键一次 -> sample 3 秒结束 -> 输出报告
+# 流程: 倒计时 3 秒 -> 你立刻在 Finder 右键一次 -> sample 8 秒结束 -> 输出报告
 
 set -u
 
@@ -20,6 +20,22 @@ fi
 echo "ℹ️  Finder PID: $FINDER_PID"
 echo ""
 
+PERF_LOG=$(mktemp -t supercloudys_perf.XXXXXX)
+LOG_PID=""
+cleanup() {
+    if [ -n "$LOG_PID" ]; then
+        kill "$LOG_PID" 2>/dev/null || true
+        wait "$LOG_PID" 2>/dev/null || true
+    fi
+    rm -f "$PERF_LOG"
+}
+trap cleanup EXIT INT TERM
+/usr/bin/stdbuf -o L /usr/bin/log stream --level debug \
+    --timeout 12s \
+    --predicate 'subsystem == "com.yeshan333.SuperCloudys"' --style compact \
+    >"$PERF_LOG" 2>/dev/null &
+LOG_PID=$!
+
 echo "准备好你的鼠标光标在 Finder 窗口里某个文件上。"
 for i in 3 2 1; do
     echo "  $i ..."
@@ -35,6 +51,9 @@ sample "$FINDER_PID" 8 -file "$SAMPLE_FILE" >/dev/null 2>&1
 
 END_TIME=$(date "+%Y-%m-%d %H:%M:%S")
 END_EPOCH=$(date +%s)
+wait "$LOG_PID" 2>/dev/null || true
+LOG_PID=""
+
 ELAPSED=$((END_EPOCH - START_EPOCH))
 echo ""
 echo "✅ 采样完成 ($ELAPSED 秒)"
@@ -43,9 +62,7 @@ echo ""
 echo "================================================================"
 echo "  ⬇️  SuperCloudys 扩展 perf log (采样窗口内)"
 echo "================================================================"
-/usr/bin/log show --start "$START_TIME" --end "$END_TIME" \
-    --predicate 'subsystem == "com.yeshan333.SuperCloudys"' --style compact 2>/dev/null \
-    | grep -v "^Timestamp" \
+grep -Ev "^(Timestamp|Filtering)" "$PERF_LOG" \
     | sed -E 's/^[^[]*\[[0-9:]+ /[/;s/^.*com.yeshan333.SuperCloudys:perf\] /  /'
 
 echo ""
@@ -61,11 +78,11 @@ echo ""
 echo "================================================================"
 echo "  ⬇️  Finder 主线程调用树 (Thread 0x... DispatchQueue 1)"
 echo "================================================================"
-# 提取主线程 (Dispatch queue: com.apple.main-thread) 的调用树
+# 提取主线程调用树（兼容不同 macOS sample 输出格式）
 awk '
 BEGIN { in_main=0 }
-/Thread .* DispatchQueue 1$/ { in_main=1; print; next }
-/^  Thread / && in_main { exit }
+/^[[:space:]]*[0-9]+ Thread_.*(Main Thread|com.apple.main-thread)/ { in_main=1; print; next }
+/^[[:space:]]*[0-9]+ Thread_/ && in_main { exit }
 in_main { print }
 ' "$SAMPLE_FILE" | head -80
 

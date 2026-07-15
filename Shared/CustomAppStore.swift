@@ -47,6 +47,8 @@ enum CustomAppStore {
         return config
     }()
 
+    static var fileURL: URL { configURL }
+
     // MARK: - In-memory cache (per-process, mtime-invalidated)
 
     private static let cacheLock = NSLock()

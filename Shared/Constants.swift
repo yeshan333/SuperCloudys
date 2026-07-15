@@ -3,6 +3,7 @@ import Foundation
 enum AppConstants {
     static let extensionBundleID = "com.yeshan333.SuperCloudys.FinderSyncExtension"
     static let appName = "SuperCloudys"
+    static let urlScheme = "supercloudys"
 }
 
 struct ExternalApp {

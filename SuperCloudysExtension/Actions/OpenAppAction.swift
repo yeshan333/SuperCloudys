@@ -11,24 +11,17 @@ enum OpenAppAction {
             showNotFoundAlert(appName: app.name)
             return
         }
-        openViaApp(appURL: appURL, urls: urls)
-    }
 
-    private static func openViaApp(appURL: URL, urls: [URL]) {
-        let config = NSWorkspace.OpenConfiguration()
-        config.activates = true
-        NSWorkspace.shared.open(
-            urls,
-            withApplicationAt: appURL,
-            configuration: config
-        ) { _, error in
-            if let error {
-                log.error("Cannot open selection with \(appURL.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
-                showAlert(
-                    title: "无法通过 \(appURL.deletingPathExtension().lastPathComponent) 打开",
-                    message: error.localizedDescription
-                )
-            }
+        var components = URLComponents()
+        components.scheme = AppConstants.urlScheme
+        components.host = "open"
+        components.queryItems = [URLQueryItem(name: "app", value: app.appPath)]
+            + urls.map { URLQueryItem(name: "path", value: $0.path) }
+
+        guard let requestURL = components.url, NSWorkspace.shared.open(requestURL) else {
+            log.error("Cannot send open request to host app")
+            showAlert(title: "无法启动 SuperCloudys", message: "请重新安装 SuperCloudys 后再试。")
+            return
         }
     }
 

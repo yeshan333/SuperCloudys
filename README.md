@@ -115,7 +115,7 @@ xcodebuild test \
 - `DispatchSourceFileSystemObject` 监听 Dock plist
 - `.utility` GCD timer 监听 `NSPasteboard.changeCount`
 - 图片在剪贴板后台队列完成压缩和原子落盘后才发布到 UI
-- Finder 菜单使用带过期时间的后台快照，主线程只组装 `NSMenu`
+- Finder 菜单使用文件事件驱动的后台快照，主线程只组装 `NSMenu`
 - JSON + 内存过滤覆盖默认 500 条历史；未引入数据库或第三方运行时依赖
 
 ## 发布
