@@ -47,7 +47,7 @@ struct DetailPanelView: View {
                 }
             }
         case .image:
-            if let path = entry.thumbnailPath ?? entry.imagePath {
+            if let path = entry.imagePath ?? entry.thumbnailPath {
                 AsyncImageView(path: path)
                     .frame(maxHeight: 200)
                     .cornerRadius(6)
