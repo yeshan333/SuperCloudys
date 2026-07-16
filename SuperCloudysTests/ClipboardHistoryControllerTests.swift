@@ -3,6 +3,11 @@ import XCTest
 
 final class ClipboardHistoryControllerTests: XCTestCase {
 
+    func testReturnCopiesUnlessCommandIsHeld() {
+        XCTAssertEqual(ClipboardHistoryView.returnAction(for: []), .copy)
+        XCTAssertEqual(ClipboardHistoryView.returnAction(for: [.command]), .paste)
+    }
+
     @MainActor
     func testCycleTypeFilterWrapsForwardAndBackward() {
         let tempDir = FileManager.default.temporaryDirectory

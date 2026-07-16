@@ -93,7 +93,8 @@ xcodebuild test \
 ### 剪贴板面板
 
 - `↑` / `↓`：移动选择
-- `Return`：粘贴到打开面板前的应用
+- `Return`：复制选中条目
+- `Cmd+Return`：粘贴到打开面板前的应用
 - `Cmd+C`：复制选中条目
 - `Cmd+.`：固定/取消固定
 - `Cmd+Delete`：删除选中条目

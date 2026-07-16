@@ -1,5 +1,10 @@
 import SwiftUI
 
+enum ClipboardReturnAction: Equatable {
+    case copy
+    case paste
+}
+
 struct ClipboardHistoryView: View {
     @ObservedObject var controller: ClipboardHistoryController
     let onDismiss: () -> Void
@@ -127,8 +132,12 @@ struct ClipboardHistoryView: View {
     }
 
     private func pasteEntry(entry: ClipboardEntry) {
-        guard controller.canPasteToPreviousApp else {
+        guard AccessibilityActivator.isTrusted else {
             showToast("请先授予辅助功能权限")
+            return
+        }
+        guard controller.previousApp?.isTerminated == false else {
+            showToast("未找到可粘贴的目标应用")
             return
         }
         onDismiss()
@@ -187,7 +196,10 @@ struct ClipboardHistoryView: View {
 
             switch event.keyCode {
             case 36:
-                pasteSelected()
+                switch Self.returnAction(for: event.modifierFlags) {
+                case .copy: copySelected()
+                case .paste: pasteSelected()
+                }
                 return nil
             case 48:
                 controller.cycleTypeFilter(reverse: event.modifierFlags.contains(.shift))
@@ -207,6 +219,10 @@ struct ClipboardHistoryView: View {
                 return event
             }
         }
+    }
+
+    static func returnAction(for modifierFlags: NSEvent.ModifierFlags) -> ClipboardReturnAction {
+        modifierFlags.contains(.command) ? .paste : .copy
     }
 
     private func removeKeyboardMonitor() {

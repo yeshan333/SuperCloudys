@@ -14,8 +14,11 @@ struct BottomBarView: View {
             Spacer()
 
             Button(action: onCopy) {
-                Label("复制", systemImage: "doc.on.doc")
-                    .font(.system(size: 12, weight: .medium))
+                HStack(spacing: 6) {
+                    Label("复制", systemImage: "doc.on.doc")
+                    Image(systemName: "return")
+                }
+                .font(.system(size: 12, weight: .medium))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
                     .background(Color.secondary.opacity(0.08))
@@ -28,6 +31,9 @@ struct BottomBarView: View {
                 HStack(spacing: 6) {
                     Text(pasteLabel)
                         .font(.system(size: 12, weight: .medium))
+                    Image(systemName: "command")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.8))
                     Image(systemName: "return")
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundColor(.white.opacity(0.8))
