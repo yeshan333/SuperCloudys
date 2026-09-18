@@ -3,6 +3,7 @@ import AppKit
 
 struct DetailPanelView: View {
     let entry: ClipboardEntry?
+    var onCopyImagePath: ((ClipboardEntry) -> Void)?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -73,6 +74,21 @@ struct DetailPanelView: View {
     private var informationPanel: some View {
         if let entry {
             VStack(alignment: .leading, spacing: 4) {
+                if entry.contentType == .image, let path = entry.imagePath {
+                    Text(path)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                        .help(path)
+                    Button("复制图片路径") {
+                        onCopyImagePath?(entry)
+                    }
+                    .font(.system(size: 11))
+                    .help("复制本地保存路径；清理此历史记录时图片文件也会删除")
+                    .padding(.bottom, 4)
+                }
+
                 Text(primaryMetadata(for: entry))
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)

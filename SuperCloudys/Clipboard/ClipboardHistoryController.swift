@@ -197,6 +197,28 @@ final class ClipboardHistoryController: ObservableObject {
         return copied
     }
 
+    @discardableResult
+    func copyImagePathToClipboard(
+        _ entry: ClipboardEntry,
+        pasteboard: NSPasteboard = .general
+    ) -> Bool {
+        guard entry.contentType == .image,
+              let path = entry.imagePath, !path.isEmpty else { return false }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory),
+              !isDirectory.boolValue else { return false }
+
+        let copied = monitor.performSelfWrite {
+            pasteboard.clearContents()
+            return pasteboard.setString(path, forType: .string)
+        }
+        if copied {
+            store.markUsed(id: entry.id)
+            reloadEntries()
+        }
+        return copied
+    }
+
     func pasteToFrontApp(_ entry: ClipboardEntry) async -> Bool {
         guard canPasteToPreviousApp, await copyToClipboard(entry),
               let app = previousApp else { return false }

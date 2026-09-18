@@ -7,6 +7,7 @@ struct EntryListView: View {
     var onDoubleClick: ((UUID) -> Void)?
     var onTogglePin: ((UUID) -> Void)?
     var onDelete: ((UUID) -> Void)?
+    var onCopyImagePath: ((ClipboardEntry) -> Void)?
     @Namespace private var animation
 
     var body: some View {
@@ -30,6 +31,12 @@ struct EntryListView: View {
                                     }
                                 }
                                 .contextMenu {
+                                    if entry.contentType == .image, entry.imagePath != nil {
+                                        Button("复制图片路径") {
+                                            onCopyImagePath?(entry)
+                                        }
+                                        Divider()
+                                    }
                                     Button(entry.isPinned ? "取消固定" : "固定") {
                                         onTogglePin?(entry.id)
                                     }

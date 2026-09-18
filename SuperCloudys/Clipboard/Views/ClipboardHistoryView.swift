@@ -41,12 +41,16 @@ struct ClipboardHistoryView: View {
                     },
                     onDelete: { id in
                         controller.delete(id: id)
+                    },
+                    onCopyImagePath: { entry in
+                        copyImagePath(entry)
                     }
                 )
                 .frame(minWidth: 280, maxWidth: 320)
 
                 DetailPanelView(
-                    entry: selectedEntry
+                    entry: selectedEntry,
+                    onCopyImagePath: { entry in copyImagePath(entry) }
                 )
                 .background(Color(NSColor.controlBackgroundColor).opacity(0.4))
             }
@@ -171,8 +175,14 @@ struct ClipboardHistoryView: View {
                 return
             }
             controller.clearSearch()
-            showToast(NSLocalizedString("已复制到剪贴板", comment: ""))
+            onDismiss()
         }
+    }
+
+    private func copyImagePath(_ entry: ClipboardEntry) {
+        showToast(controller.copyImagePathToClipboard(entry)
+            ? "已复制图片路径"
+            : "复制失败，图片文件可能已不存在")
     }
 
     private func showToast(_ message: String) {
