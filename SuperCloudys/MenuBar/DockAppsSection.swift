@@ -20,11 +20,7 @@ struct DockAppsSection: View {
             } else {
                 ForEach(monitor.apps.prefix(DockApp.maxShortcutApps)) { app in
                     Button(action: { activate(app) }) {
-                        Label {
-                            Text(rowTitle(for: app))
-                        } icon: {
-                            AppIconView(path: app.appPath)
-                        }
+                        ApplicationMenuLabel(title: rowTitle(for: app), appPath: app.appPath)
                     }
                 }
             }
@@ -43,8 +39,6 @@ struct DockAppsSection: View {
         }
         return app.name
     }
-
-
 
     private func activate(_ app: DockApp) {
         DockAppLauncher.toggle(bundleID: app.bundleID, appPath: app.appPath)

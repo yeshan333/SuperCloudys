@@ -24,6 +24,12 @@ final class DockMonitor: ObservableObject {
         startMonitoring()
     }
 
+    // 菜单预览与渲染测试使用固定数据，不注册快捷键或监听真实 Dock。
+    init(apps: [DockApp]) {
+        self.shortcutsEnabled = false
+        self.apps = apps
+    }
+
     deinit {
         source?.cancel()
     }
@@ -35,6 +41,7 @@ final class DockMonitor: ObservableObject {
         readError = result.error
         let changed = newApps != apps
         self.apps = newApps
+        AppIconCache.shared.preload(paths: newApps.prefix(DockApp.maxShortcutApps).map(\.appPath))
         if changed || forceRegister {
             updateShortcuts()
         }

@@ -169,7 +169,6 @@ struct DetailPanelView: View {
 private struct AsyncImageView: View {
     let path: String
     @State private var nsImage: NSImage?
-    @State private var loadingPath: String?
     @State private var loadFailed = false
 
     var body: some View {
@@ -185,51 +184,14 @@ private struct AsyncImageView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .onAppear { loadImage() }
-        .onChange(of: path) {
+        .task(id: path) {
             nsImage = nil
             loadFailed = false
-            loadImage()
+            let loaded = await ClipboardImagePreviewLoader.shared.image(at: path)
+            guard !Task.isCancelled else { return }
+            nsImage = loaded
+            loadFailed = loaded == nil
         }
-    }
-
-    private func loadImage() {
-        let currentPath = path
-        loadingPath = currentPath
-        loadFailed = false
-        if let cached = ImageCache.shared.get(currentPath) {
-            nsImage = cached
-            return
-        }
-        DispatchQueue.global(qos: .userInitiated).async {
-            guard let loaded = NSImage(contentsOfFile: currentPath) else {
-                DispatchQueue.main.async {
-                    guard loadingPath == currentPath else { return }
-                    loadFailed = true
-                }
-                return
-            }
-            ImageCache.shared.set(loaded, forKey: currentPath)
-            DispatchQueue.main.async {
-                guard loadingPath == currentPath else { return }
-                nsImage = loaded
-            }
-        }
-    }
-}
-
-private final class ImageCache: @unchecked Sendable {
-    static let shared = ImageCache()
-    private let cache = NSCache<NSString, NSImage>()
-
-    init() { cache.countLimit = 30 }
-
-    func get(_ key: String) -> NSImage? {
-        cache.object(forKey: key as NSString)
-    }
-
-    func set(_ image: NSImage, forKey key: String) {
-        cache.setObject(image, forKey: key as NSString)
     }
 }
 

@@ -41,6 +41,25 @@ final class ClipboardStoreTests: XCTestCase {
         XCTAssertEqual(store.allEntries.count, 2)
     }
 
+    func testCopyingDifferentTextsWithCollidingFingerprintsPreservesBothAfterRestart() {
+        let first = makeEntry(text: "Ab")
+        let second = makeEntry(text: "BA")
+        XCTAssertEqual(first.fingerprint, second.fingerprint)
+        store.insert(first)
+        store.insert(second)
+        store.flush()
+
+        let reloaded = ClipboardStore(maxEntries: 10, storageDirectory: tempDir)
+        XCTAssertEqual(reloaded.allEntries.compactMap(\.plainText), ["BA", "Ab"])
+    }
+
+    func testCopyingSameTextWithDifferentTypesAndMatchingFingerprintsKeepsBoth() {
+        store.insert(makeEntry(text: "same", type: .text, fingerprint: "collision"))
+        store.insert(makeEntry(text: "same", type: .url, fingerprint: "collision"))
+
+        XCTAssertEqual(store.allEntries.map(\.contentType), [.url, .text])
+    }
+
     func testDeleteById() {
         let entry = makeEntry(text: "to delete")
         store.insert(entry)
@@ -198,8 +217,8 @@ final class ClipboardStoreTests: XCTestCase {
         try Data([1]).write(to: first)
         try Data([1]).write(to: duplicate)
 
-        store.insert(makeImageEntry(fingerprint: "same-image", original: first.path))
-        store.insert(makeImageEntry(fingerprint: "same-image", original: duplicate.path))
+        store.insert(makeImageEntry(fingerprint: ClipboardEntry.fingerprint(type: .image, data: Data([1])), original: first.path))
+        store.insert(makeImageEntry(fingerprint: ClipboardEntry.fingerprint(type: .image, data: Data([1])), original: duplicate.path))
         store.flush()
 
         XCTAssertEqual(store.allEntries.count, 1)
@@ -207,7 +226,22 @@ final class ClipboardStoreTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: duplicate.path))
     }
 
-    func testCorruptHistoryIsBackedUp() throws {
+    func testCopyingImagesWithLegacyFingerprintCollisionPreservesBothFilesAfterRestart() throws {
+        let first = store.assetsDirectory.appendingPathComponent("first.png")
+        let second = store.assetsDirectory.appendingPathComponent("second.png")
+        try Data([65, 98]).write(to: first)
+        try Data([66, 65]).write(to: second)
+        store.insert(makeImageEntry(fingerprint: "legacy-collision", original: first.path))
+        store.insert(makeImageEntry(fingerprint: "legacy-collision", original: second.path))
+        store.flush()
+
+        let reloaded = ClipboardStore(maxEntries: 10, storageDirectory: tempDir)
+        XCTAssertEqual(reloaded.allEntries.count, 2)
+        XCTAssertEqual(try Data(contentsOf: first), Data([65, 98]))
+        XCTAssertEqual(try Data(contentsOf: second), Data([66, 65]))
+    }
+
+    func testCorruptHistoryAndImagesRemainInPrivateRecoveryDirectoryAcrossRestarts() throws {
         let history = tempDir.appendingPathComponent("clipboard_history.json")
         let preserved = store.assetsDirectory.appendingPathComponent("preserved.png")
         try Data([1]).write(to: preserved)
@@ -217,15 +251,70 @@ final class ClipboardStoreTests: XCTestCase {
         let files = try FileManager.default.contentsOfDirectory(
             at: tempDir, includingPropertiesForKeys: nil
         )
+        let backup = try XCTUnwrap(files.first { $0.lastPathComponent.hasPrefix("clipboard_recovery_") })
+        let backupHistory = backup.appendingPathComponent("clipboard_history.json")
+        let backupImage = backup.appendingPathComponent("ClipboardAssets/preserved.png")
+        recovered.insert(makeEntry(text: "new history"))
+        recovered.flush()
+        for _ in 0..<2 {
+            let reloaded = ClipboardStore(maxEntries: 10, storageDirectory: tempDir)
+            XCTAssertEqual(reloaded.allEntries.first?.plainText, "new history")
+            reloaded.flush()
+        }
 
-        XCTAssertTrue(recovered.allEntries.isEmpty)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: preserved.path))
-        XCTAssertTrue(files.contains { $0.lastPathComponent.hasPrefix("clipboard_history.corrupt-") })
+        XCTAssertEqual(try Data(contentsOf: backupHistory), Data("not json".utf8))
+        XCTAssertEqual(try Data(contentsOf: backupImage), Data([1]))
+        XCTAssertEqual(try permissions(at: backup), 0o700)
+        XCTAssertEqual(try permissions(at: backupHistory), 0o600)
+        XCTAssertEqual(try permissions(at: backupImage), 0o600)
+    }
+
+    func testFailedImageBackupDoesNotOverwriteCorruptHistoryWhenSavingNewEntries() throws {
+        let history = tempDir.appendingPathComponent("clipboard_history.json")
+        let corruptData = Data("unrecoverable json".utf8)
+        try corruptData.write(to: history)
+        try FileManager.default.removeItem(at: store.assetsDirectory)
+        try FileManager.default.createSymbolicLink(
+            at: store.assetsDirectory, withDestinationURL: tempDir.appendingPathComponent("missing-assets")
+        )
+
+        let recovered = ClipboardStore(maxEntries: 10, storageDirectory: tempDir)
+        recovered.insert(makeEntry(text: "new entry"))
+        recovered.flush()
+
+        XCTAssertNotNil(recovered.lastError)
+        XCTAssertEqual(try Data(contentsOf: history), corruptData)
+    }
+
+    func testLegacyCorruptBackupAndImagesAreProtectedBeforeStartupCleanup() throws {
+        store.insert(makeEntry(text: "current history"))
+        store.flush()
+        let legacy = tempDir.appendingPathComponent("clipboard_history.corrupt-123.json")
+        try Data("old corrupt history".utf8).write(to: legacy)
+        let image = store.assetsDirectory.appendingPathComponent("legacy.png")
+        try Data([7]).write(to: image)
+
+        let migrated = ClipboardStore(maxEntries: 10, storageDirectory: tempDir)
+        migrated.flush()
+        _ = ClipboardStore(maxEntries: 10, storageDirectory: tempDir)
+        let files = try FileManager.default.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil)
+        let backup = try XCTUnwrap(files.first { $0.lastPathComponent.hasPrefix("clipboard_recovery_") })
+
+        XCTAssertEqual(migrated.allEntries.first?.plainText, "current history")
+        XCTAssertEqual(try Data(contentsOf: backup.appendingPathComponent(legacy.lastPathComponent)),
+                       Data("old corrupt history".utf8))
+        XCTAssertEqual(try Data(contentsOf: backup.appendingPathComponent("ClipboardAssets/legacy.png")), Data([7]))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: legacy.path))
+    }
+
+    private func permissions(at url: URL) throws -> Int {
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        return try XCTUnwrap(attributes[.posixPermissions] as? NSNumber).intValue
     }
 
     // MARK: - Helpers
 
-    private func makeEntry(text: String, type: ClipboardContentType = .text) -> ClipboardEntry {
+    private func makeEntry(text: String, type: ClipboardContentType = .text, fingerprint: String? = nil) -> ClipboardEntry {
         ClipboardEntry(
             id: UUID(),
             contentType: type,
@@ -237,7 +326,7 @@ final class ClipboardStoreTests: XCTestCase {
             sourceAppName: "TestApp",
             isPinned: false,
             lastUsedAt: nil,
-            fingerprint: ClipboardEntry.fingerprint(type: type, content: text),
+            fingerprint: fingerprint ?? ClipboardEntry.fingerprint(type: type, content: text),
             imagePath: nil,
             thumbnailPath: nil,
             filePaths: nil,

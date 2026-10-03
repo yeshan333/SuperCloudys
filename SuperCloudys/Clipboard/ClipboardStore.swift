@@ -10,6 +10,7 @@ final class ClipboardStore: @unchecked Sendable {
 
     private var entries: [ClipboardEntry] = []
     private var storedError: String?
+    private var persistenceBlocked = false
     private let lock = NSLock()
     private var saveWorkItem: DispatchWorkItem?
     private var saveGeneration = 0
@@ -21,7 +22,7 @@ final class ClipboardStore: @unchecked Sendable {
         let entry: ClipboardEntry
     }
 
-    init(maxEntries: Int = 500, storageDirectory: URL? = nil) {
+    init(maxEntries: Int = 3000, storageDirectory: URL? = nil) {
         let baseDir = storageDirectory ?? Self.defaultStorageDir()
         self.storageURL = baseDir.appendingPathComponent("clipboard_history.json")
         self.assetsDir = baseDir.appendingPathComponent("ClipboardAssets")
@@ -40,10 +41,11 @@ final class ClipboardStore: @unchecked Sendable {
         }
         setPermissions(0o700, at: assetsDir)
 
+        let legacyAssetsProtected = preserveLegacyRecoveryAssets()
         let loaded = loadFromDisk()
         self.entries = loaded.entries
         let removed = trimIfNeededLocked()
-        var canReconcileAssets = loaded.canReconcileAssets
+        var canReconcileAssets = loaded.canReconcileAssets && legacyAssetsProtected
         if !removed.isEmpty {
             if write(entries) {
                 removeAssets(for: removed)
@@ -71,7 +73,7 @@ final class ClipboardStore: @unchecked Sendable {
 
     func insert(_ entry: ClipboardEntry) {
         let removed: [ClipboardEntry] = withLock {
-            if let index = entries.firstIndex(where: { $0.fingerprint == entry.fingerprint && !$0.isPinned }) {
+            if let index = entries.firstIndex(where: { $0.fingerprint == entry.fingerprint && !$0.isPinned && $0.hasSameContent(as: entry) }) {
                 var existing = entries.remove(at: index)
                 existing.lastUsedAt = Date()
                 entries.insert(existing, at: 0)
@@ -124,12 +126,7 @@ final class ClipboardStore: @unchecked Sendable {
     }
 
     func search(query: String) -> [ClipboardEntry] {
-        let snapshot = allEntries
-        return snapshot.filter { entry in
-            entry.title.range(of: query, options: .caseInsensitive) != nil
-                || (entry.plainText?.range(of: query, options: .caseInsensitive) != nil)
-                || (entry.sourceAppName?.range(of: query, options: .caseInsensitive) != nil)
-        }
+        ClipboardSearch.filter(allEntries, query: query) ?? []
     }
 
     func filter(by type: ClipboardContentType) -> [ClipboardEntry] {
@@ -217,6 +214,7 @@ final class ClipboardStore: @unchecked Sendable {
 
     @discardableResult
     private func write(_ snapshot: [ClipboardEntry]) -> Bool {
+        guard !persistenceBlocked else { return false }
         do {
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
@@ -233,7 +231,8 @@ final class ClipboardStore: @unchecked Sendable {
     private func loadFromDisk() -> (entries: [ClipboardEntry], canReconcileAssets: Bool) {
         guard FileManager.default.fileExists(atPath: storageURL.path) else { return ([], true) }
         guard let data = try? Data(contentsOf: storageURL) else {
-            recordError("无法读取剪贴板历史。")
+            persistenceBlocked = true
+            recordError("无法读取剪贴板历史，已暂停保存以保护原文件。")
             return ([], false)
         }
 
@@ -242,16 +241,64 @@ final class ClipboardStore: @unchecked Sendable {
             decoder.dateDecodingStrategy = .iso8601
             return (try decoder.decode([ClipboardEntry].self, from: data), true)
         } catch {
-            let backup = storageURL.deletingPathExtension()
-                .appendingPathExtension("corrupt-\(Int(Date().timeIntervalSince1970)).json")
             do {
-                try FileManager.default.moveItem(at: storageURL, to: backup)
-                recordError("剪贴板历史损坏，已备份并重置。")
+                let backup = try preserveCorruptHistory([storageURL])
+                recordError("剪贴板历史损坏，历史和图片已备份至 \(backup.lastPathComponent)。")
             } catch {
-                recordError("剪贴板历史损坏且无法备份：\(error.localizedDescription)")
+                persistenceBlocked = true
+                recordError("剪贴板历史损坏且无法完整备份，已暂停保存：\(error.localizedDescription)")
             }
             return ([], false)
         }
+    }
+
+    private func preserveLegacyRecoveryAssets() -> Bool {
+        do {
+            let files = try FileManager.default.contentsOfDirectory(
+                at: storageURL.deletingLastPathComponent(), includingPropertiesForKeys: nil
+            )
+            let legacy = files.filter {
+                $0.lastPathComponent.hasPrefix("clipboard_history.corrupt-")
+                    && $0.pathExtension == "json"
+            }
+            guard !legacy.isEmpty else { return true }
+            _ = try preserveCorruptHistory(legacy)
+            // All old backups and potentially associated images are now together.
+            for file in legacy { try FileManager.default.removeItem(at: file) }
+            return true
+        } catch {
+            persistenceBlocked = true
+            recordError("无法保护旧版损坏历史备份，已暂停保存和清理：\(error.localizedDescription)")
+            return false
+        }
+    }
+
+    private func preserveCorruptHistory(_ histories: [URL]) throws -> URL {
+        let manager = FileManager.default
+        let backup = storageURL.deletingLastPathComponent()
+            .appendingPathComponent("clipboard_recovery_" + UUID().uuidString)
+        try manager.createDirectory(at: backup, withIntermediateDirectories: false,
+                                    attributes: [.posixPermissions: 0o700])
+        // Keep originals intact until every recovery file is safely copied. A failed
+        // backup disables writes and cleanup for this instance; a later launch can retry.
+        for history in histories {
+            let historyBackup = backup.appendingPathComponent(history.lastPathComponent)
+            try manager.copyItem(at: history, to: historyBackup)
+            try manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: historyBackup.path)
+        }
+        let assetBackup = backup.appendingPathComponent(assetsDir.lastPathComponent)
+        try manager.copyItem(at: assetsDir, to: assetBackup)
+        try manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: assetBackup.path)
+        if let files = manager.enumerator(at: assetBackup,
+                                          includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey]) {
+            for case let file as URL in files {
+                let values = try file.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+                guard values.isSymbolicLink != true else { continue }
+                try manager.setAttributes([.posixPermissions: values.isDirectory == true ? 0o700 : 0o600],
+                                          ofItemAtPath: file.path)
+            }
+        }
+        return backup
     }
 
     private func removeOrphanedAssets() {

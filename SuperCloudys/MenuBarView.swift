@@ -84,7 +84,7 @@ struct MenuBarView: View {
             }
 
             Menu("最多记录：\(clipboard.maxEntries) 条") {
-                ForEach([100, 500, 1000], id: \.self) { count in
+                ForEach([100, 500, 1000, 2000, 3000, 5000, 10000], id: \.self) { count in
                     Button {
                         clipboard.setMaxEntries(count)
                     } label: {
@@ -121,11 +121,9 @@ struct MenuBarView: View {
             ForEach(monitoredExtensions, id: \.self) { ext in
                 if let appInfo = defaultApps[ext] {
                     Button(action: { changeDefaultApp(for: ext) }) {
-                        Label {
-                            Text(".\(ext)  →  \(appInfo.appName)")
-                        } icon: {
-                            AppIconView(path: appInfo.appPath)
-                        }
+                        ApplicationMenuLabel(
+                            title: ".\(ext)  →  \(appInfo.appName)", appPath: appInfo.appPath
+                        )
                     }
                 } else if defaultAppsLoading {
                     Text(".\(ext)  →  正在读取…")
@@ -159,11 +157,9 @@ struct MenuBarView: View {
         Section("自定义打开方式") {
             ForEach(customApps) { app in
                 Button(action: { removeCustomApp(app) }) {
-                    Label {
-                        Text("\(app.name)  (点击移除)")
-                    } icon: {
-                        AppIconView(path: app.appPath)
-                    }
+                    ApplicationMenuLabel(
+                        title: "\(app.name)  (点击移除)", appPath: app.appPath
+                    )
                 }
             }
 

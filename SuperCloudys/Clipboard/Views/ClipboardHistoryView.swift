@@ -147,7 +147,7 @@ struct ClipboardHistoryView: View {
         onDismiss()
         controller.clearSearch()
         Task { @MainActor in
-            guard await controller.pasteToFrontApp(entry) else {
+            if await controller.pasteToFrontApp(entry) == .failed {
                 ClipboardPanelController.shared.show()
                 showToast("粘贴失败，目标应用未能激活")
                 return

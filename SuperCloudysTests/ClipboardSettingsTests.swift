@@ -41,8 +41,7 @@ final class ClipboardSettingsTests: XCTestCase {
         XCTAssertFalse(settings.isAppExcluded("com.apple.keychainaccess"))
     }
 
-    func testMaxEntriesDefault() {
-        // Clear any previously saved value
-        XCTAssertEqual(settings.maxEntries, 500)
+    func testMaxEntriesDefaultsTo3000WhenNoLimitIsSaved() {
+        XCTAssertEqual(settings.maxEntries, 3000)
     }
 }

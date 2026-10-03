@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 enum ClipboardContentType: String, Codable, CaseIterable, Sendable {
     case text
@@ -50,10 +51,21 @@ struct ClipboardEntry: Identifiable, Codable, Hashable, Sendable {
     }
 
     static func fingerprint(type: ClipboardContentType, data: Data) -> String {
-        var hash: UInt64 = 5381
-        update(&hash, with: type.rawValue.utf8)
-        update(&hash, with: data)
-        return String(hash, radix: 16)
+        var hash = SHA256()
+        hash.update(data: Data((type.rawValue + ":").utf8))
+        hash.update(data: data)
+        return "sha256:" + hash.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    func hasSameContent(as other: ClipboardEntry) -> Bool {
+        guard contentType == other.contentType else { return false }
+        if contentType == .image {
+            // Old image fingerprints are weak hashes; never discard an image on that basis.
+            return fingerprint.hasPrefix("sha256:") && fingerprint == other.fingerprint
+        }
+        guard let plainText, let otherText = other.plainText else { return false }
+        return plainText.utf8.elementsEqual(otherText.utf8)
+            && filePaths == other.filePaths && colorHex == other.colorHex
     }
 
     private static func update<S: Sequence>(

@@ -38,6 +38,14 @@ final class ClipboardEntryTests: XCTestCase {
         )
     }
 
+    func testImagesWhoseBytesCollideUnderLegacyHashReceiveDifferentFingerprints() {
+        let first = ClipboardEntry.fingerprint(type: .image, data: Data([65, 98]))
+        let second = ClipboardEntry.fingerprint(type: .image, data: Data([66, 65]))
+
+        XCTAssertTrue(first.hasPrefix("sha256:"))
+        XCTAssertNotEqual(first, second)
+    }
+
     func testCharacterCount() {
         let entry = makeEntry(plainText: "Hello, 世界!")
         XCTAssertEqual(entry.characterCount, 10)

@@ -6,11 +6,39 @@ final class ClipboardHistoryController: ObservableObject {
 
     static let shared = ClipboardHistoryController()
 
+    enum PasteResult: Equatable {
+        case pasted
+        case cancelled
+        case failed
+    }
+
+    typealias SearchFilter = @Sendable ([ClipboardEntry], String, ClipboardContentType?) -> [ClipboardEntry]?
+
     @Published private(set) var entries: [ClipboardEntry] = []
-    @Published var searchQuery: String = "" { didSet { scheduleFilter() } }
-    @Published var typeFilter: ClipboardContentType? { didSet { scheduleFilter(delay: 0) } }
+    @Published var searchQuery: String = "" {
+        didSet {
+            guard searchQuery != oldValue else { return }
+            scheduleFilter(delay: searchQuery.isEmpty ? 0 : 0.15)
+        }
+    }
+    @Published var typeFilter: ClipboardContentType? {
+        didSet {
+            guard typeFilter != oldValue else { return }
+            scheduleFilter(delay: 0)
+        }
+    }
     @Published private(set) var filteredEntries: [ClipboardEntry] = []
-    @Published var isPanelVisible: Bool = false
+    @Published var isPanelVisible: Bool = false {
+        didSet {
+            guard isPanelVisible != oldValue else { return }
+            if isPanelVisible {
+                pasteGeneration &+= 1
+                if needsFilter { scheduleFilter(delay: 0) }
+            } else {
+                cancelFilter()
+            }
+        }
+    }
     @Published private(set) var isMonitoringPaused: Bool
     @Published private(set) var retentionDays: Int
     @Published private(set) var maxEntries: Int
@@ -23,12 +51,25 @@ final class ClipboardHistoryController: ObservableObject {
     private let settings: ClipboardSettings
     private let log = Logger(subsystem: "com.yeshan333.SuperCloudys", category: "ClipboardHistory")
     private var filterTask: Task<Void, Never>?
+    private var filterWorker: Task<FilterResult?, Never>?
+    private var sortedEntries: [ClipboardEntry]?
+    private var needsFilter = true
+    private var pasteGeneration: UInt64 = 0
+    private let searchFilter: SearchFilter
+
+    private struct FilterResult: Sendable {
+        let sortedEntries: [ClipboardEntry]
+        let matches: [ClipboardEntry]
+    }
 
     private init() {
         let settings = ClipboardSettings.shared
         let store = ClipboardStore(maxEntries: settings.maxEntries)
         if settings.retentionDays > 0 {
             store.applyRetention(maxAge: TimeInterval(settings.retentionDays) * 86_400)
+        }
+        self.searchFilter = { @Sendable entries, query, type in
+            Self.runSearch(entries, query: query, type: type)
         }
         self.settings = settings
         self.store = store
@@ -43,13 +84,20 @@ final class ClipboardHistoryController: ObservableObject {
             : frontmost
         self.monitor.assetsDirectory = store.assetsDirectory
         self.entries = store.allEntries
-        self.filteredEntries = entries
         monitor.delegate = self
         scheduleFilter(delay: 0)
     }
 
     // For testing
-    init(store: ClipboardStore, monitor: ClipboardMonitorService, settings: ClipboardSettings) {
+    init(
+        store: ClipboardStore,
+        monitor: ClipboardMonitorService,
+        settings: ClipboardSettings,
+        searchFilter: @escaping SearchFilter = { @Sendable entries, query, type in
+            ClipboardHistoryController.runSearch(entries, query: query, type: type)
+        }
+    ) {
+        self.searchFilter = searchFilter
         self.store = store
         self.monitor = monitor
         self.settings = settings
@@ -59,7 +107,6 @@ final class ClipboardHistoryController: ObservableObject {
         self.excludedApps = settings.excludedApps.sorted()
         self.previousApp = nil
         self.entries = store.allEntries
-        self.filteredEntries = entries
         monitor.delegate = self
         scheduleFilter(delay: 0)
     }
@@ -143,7 +190,6 @@ final class ClipboardHistoryController: ObservableObject {
     func clearSearch() {
         guard !searchQuery.isEmpty else { return }
         searchQuery = ""
-        scheduleFilter(delay: 0)
     }
 
     func cycleTypeFilter(reverse: Bool = false) {
@@ -159,7 +205,10 @@ final class ClipboardHistoryController: ObservableObject {
     }
 
     @discardableResult
-    func copyToClipboard(_ entry: ClipboardEntry) async -> Bool {
+    func copyToClipboard(
+        _ entry: ClipboardEntry,
+        isCurrent: @escaping @MainActor () -> Bool = { true }
+    ) async -> Bool {
         let pasteboard = NSPasteboard.general
         let writer: () -> Bool
 
@@ -186,6 +235,8 @@ final class ClipboardHistoryController: ObservableObject {
             guard let text = entry.plainText else { return false }
             writer = { pasteboard.setString(text, forType: .string) }
         }
+        // 图片读取可能跨越一次面板重开；过期操作不能再覆盖剪贴板。
+        guard isCurrent(), !Task.isCancelled else { return false }
         let copied = monitor.performSelfWrite {
             pasteboard.clearContents()
             return writer()
@@ -219,19 +270,52 @@ final class ClipboardHistoryController: ObservableObject {
         return copied
     }
 
-    func pasteToFrontApp(_ entry: ClipboardEntry) async -> Bool {
-        guard canPasteToPreviousApp, await copyToClipboard(entry),
-              let app = previousApp else { return false }
-        app.activate(options: [.activateAllWindows])
-        for _ in 0..<20 {
-            if NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier {
-                return Self.simulatePaste()
+    func pasteToFrontApp(_ entry: ClipboardEntry) async -> PasteResult {
+        // 在首次挂起前固定目标，避免图片读取期间重开面板改变粘贴目的地。
+        guard canPasteToPreviousApp, let app = previousApp else { return .failed }
+        return await performPaste(
+            copy: { isCurrent in
+                await self.copyToClipboard(entry, isCurrent: isCurrent)
+            },
+            paste: { isCurrent in
+                guard isCurrent(), !app.isTerminated else { return false }
+                app.activate(options: [.activateAllWindows])
+                for _ in 0..<20 {
+                    guard isCurrent(), !app.isTerminated else { return false }
+                    if NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier {
+                        return Self.simulatePaste()
+                    }
+                    _ = AccessibilityActivator.activate(pid: app.processIdentifier)
+                    do {
+                        try await Task.sleep(nanoseconds: 50_000_000)
+                    } catch {
+                        return false
+                    }
+                }
+                self.log.warning("Paste cancelled because target app did not become frontmost")
+                return false
             }
-            _ = AccessibilityActivator.activate(pid: app.processIdentifier)
-            try? await Task.sleep(nanoseconds: 50_000_000)
+        )
+    }
+
+    // Separates session validity from platform effects so cancellation is testable without
+    // writing the system clipboard or sending keyboard events to another application.
+    func performPaste(
+        copy: @MainActor (@escaping @MainActor () -> Bool) async -> Bool,
+        paste: @MainActor (@escaping @MainActor () -> Bool) async -> Bool
+    ) async -> PasteResult {
+        pasteGeneration &+= 1
+        let generation = pasteGeneration
+        let isCurrent: @MainActor () -> Bool = { [weak self] in
+            !Task.isCancelled && self?.pasteGeneration == generation
         }
-        log.warning("Paste cancelled because target app did not become frontmost")
-        return false
+        guard isCurrent() else { return .cancelled }
+        let copied = await copy(isCurrent)
+        guard isCurrent() else { return .cancelled }
+        guard copied else { return .failed }
+        let pasted = await paste(isCurrent)
+        guard isCurrent() else { return .cancelled }
+        return pasted ? .pasted : .failed
     }
 
     var canPasteToPreviousApp: Bool {
@@ -239,6 +323,7 @@ final class ClipboardHistoryController: ObservableObject {
     }
 
     func rememberFrontmostApp() {
+        pasteGeneration &+= 1
         let app = NSWorkspace.shared.frontmostApplication
         if app?.bundleIdentifier != Bundle.main.bundleIdentifier {
             previousApp = app
@@ -249,60 +334,55 @@ final class ClipboardHistoryController: ObservableObject {
 
     private func reloadEntries() {
         entries = store.allEntries
+        sortedEntries = nil
         scheduleFilter(delay: 0)
     }
 
-    private func scheduleFilter(delay: TimeInterval = 0.15) {
+    private func cancelFilter() {
         filterTask?.cancel()
+        filterWorker?.cancel()
+        filterTask = nil
+        filterWorker = nil
+    }
+
+    private func scheduleFilter(delay: TimeInterval = 0.15) {
+        cancelFilter()
+        needsFilter = true
+        // 常驻记录时不执行全文搜索，打开面板后再处理最新快照。
+        guard isPanelVisible else {
+            filteredEntries = []
+            return
+        }
         let snapshot = entries
+        let cachedOrder = sortedEntries
         let query = searchQuery
         let filter = typeFilter
+        let searchFilter = self.searchFilter
         filterTask = Task { @MainActor [weak self] in
             if delay > 0 {
                 try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             }
-            guard !Task.isCancelled else { return }
-            let result = await Task.detached(priority: .userInitiated) {
-                Self.filterEntries(snapshot, query: query, type: filter)
-            }.value
-            guard !Task.isCancelled else { return }
-            guard let self,
-                  self.searchQuery == query,
-                  self.typeFilter == filter else { return }
-            self.filteredEntries = result
+            guard !Task.isCancelled, let self else { return }
+            let worker = Task.detached(priority: .userInitiated) { () -> FilterResult? in
+                guard !Task.isCancelled else { return nil }
+                let sorted = cachedOrder ?? ClipboardSearch.sorted(snapshot)
+                guard let matches = searchFilter(sorted, query, filter) else { return nil }
+                return FilterResult(sortedEntries: sorted, matches: matches)
+            }
+            self.filterWorker = worker
+            guard let result = await worker.value, !Task.isCancelled else { return }
+            self.sortedEntries = result.sortedEntries
+            self.filteredEntries = result.matches
+            self.needsFilter = false
+            self.filterWorker = nil
+            self.filterTask = nil
         }
     }
 
-    nonisolated private static func filterEntries(
-        _ entries: [ClipboardEntry],
-        query: String,
-        type: ClipboardContentType?
-    ) -> [ClipboardEntry] {
-        var result = entries
-        if let type {
-            result = result.filter {
-                type == .text
-                    ? $0.contentType == .text || $0.contentType == .richText
-                    : $0.contentType == type
-            }
-        }
-        if !query.isEmpty {
-            result = result.filter { entry in
-                entry.title.range(of: query, options: .caseInsensitive) != nil
-                    || (entry.plainText?.range(of: query, options: .caseInsensitive) != nil)
-                    || (entry.sourceAppName?.range(of: query, options: .caseInsensitive) != nil)
-            }
-        }
-
-        result.sort { lhs, rhs in
-            if lhs.isPinned != rhs.isPinned {
-                return lhs.isPinned
-            }
-            let lhsDate = lhs.lastUsedAt ?? lhs.createdAt
-            let rhsDate = rhs.lastUsedAt ?? rhs.createdAt
-            return lhsDate > rhsDate
-        }
-        return result
+    nonisolated static func runSearch(
+        _ entries: [ClipboardEntry], query: String, type: ClipboardContentType?
+    ) -> [ClipboardEntry]? {
+        ClipboardSearch.filter(entries, query: query, type: type, isCancelled: { Task.isCancelled })
     }
 
     private static func simulatePaste() -> Bool {

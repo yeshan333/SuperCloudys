@@ -55,7 +55,7 @@ final class ClipboardSettings: @unchecked Sendable {
     var maxEntries: Int {
         get {
             let val = defaults.integer(forKey: Keys.maxEntries)
-            return val > 0 ? val : 500
+            return val > 0 ? val : 3000
         }
         set { defaults.set(newValue, forKey: Keys.maxEntries) }
     }
