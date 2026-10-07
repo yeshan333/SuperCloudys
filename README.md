@@ -1,6 +1,6 @@
 # SuperCloudys
 
-原生 macOS 桌面增效工具：Finder 右键菜单、Dock 全局快捷键、剪贴板历史和菜单栏管理。
+原生 macOS 桌面增效工具：Finder 右键菜单、Dock 全局快捷键、应用默认输入法、剪贴板历史和菜单栏管理。
 
 ## 功能
 
@@ -18,6 +18,18 @@
 - 未运行时启动，后台时聚焦，前台时轮换窗口，轮换完成后隐藏
 - 使用文件系统事件自动跟随 Dock 变化，无后台轮询
 - 菜单栏会直接显示快捷键注册冲突
+
+### 应用默认输入法
+
+- 在菜单栏“应用默认输入法 → 添加应用…”选择 `.app` 和默认输入法，再开启“启用自动切换”
+- 每次应用进入前台时切换到配置的输入法；未配置的应用保持当前输入法
+- 切换应用或手动切换输入法后，鼠标指针旁显示 28×28 的当前输入法图标，约 0.8 秒后消失；不抢焦点、不拦截点击，可单独关闭
+- 提示支持按输入法模式保存底色和图标颜色；彩色图标保留原色，单色图标使用配置的前景色
+- 应用配置行、输入法选项和添加应用时的下拉框显示输入法图标，并沿用提示的配色
+- 在同一应用中手动切换输入法后，下次重新进入该应用才恢复默认输入法
+- 支持修改和移除配置，重启后保留配置和启用状态；按 Bundle ID 匹配应用
+- 只列出系统已启用、可选择的键盘输入源，分别保存输入法模式；输入法不可用或切换失败时在菜单中提示
+- 使用系统输入源 API，不需要辅助功能权限
 
 ### 剪贴板历史
 
@@ -79,6 +91,18 @@ xcodebuild test \
   -destination "platform=macOS,arch=$(uname -m)"
 ```
 
+输入法测试默认不改变系统输入法。若需验证真实切换，可单独运行以下集成检查；检查结束后会恢复原输入法：
+
+```bash
+TEST_RUNNER_SUPERCLOUDYS_INPUT_SOURCE_SMOKE=1 xcodebuild test \
+  -project SuperCloudys.xcodeproj \
+  -scheme SuperCloudysTests \
+  -destination "platform=macOS,arch=$(uname -m)" \
+  -only-testing:SuperCloudysTests/AppInputSourceControllerTests/testSystemSelectionChangesCurrentInputSourceAndRestoresOriginal
+```
+
+提示浮层的原生检查需设置 `TEST_RUNNER_SUPERCLOUDYS_INDICATOR_SMOKE=1`，并使用 `-only-testing:SuperCloudysTests/InputSourceIndicatorTests`；检查浮层显示、焦点保持、点击穿透和自动消失，预览图片输出到 `/tmp/SuperCloudys-input-source-indicator.png`。
+
 ## 使用
 
 ### Finder
@@ -108,7 +132,7 @@ xcodebuild test \
 
 ## 架构
 
-- `SuperCloudys/`：菜单栏主应用、Dock 快捷键、剪贴板历史
+- `SuperCloudys/`：菜单栏主应用、Dock 快捷键、应用默认输入法、剪贴板历史
 - `SuperCloudysExtension/`：沙盒化 Finder Sync 扩展
 - `Shared/`：主应用和扩展共享的模型及自定义应用配置
 - `project.yml`：XcodeGen 项目配置
@@ -116,6 +140,7 @@ xcodebuild test \
 关键实现：
 
 - Carbon `RegisterEventHotKey` 注册全局快捷键
+- `NSWorkspace` 前台应用事件 + Carbon `TISSelectInputSource` 切换应用默认输入法，无后台轮询
 - `DispatchSourceFileSystemObject` 监听 Dock plist
 - `.utility` GCD timer 监听 `NSPasteboard.changeCount`
 - 图片在剪贴板后台队列完成压缩和原子落盘后才发布到 UI

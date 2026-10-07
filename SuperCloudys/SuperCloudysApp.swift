@@ -12,6 +12,7 @@ struct SuperCloudysApp: App {
         guard !Self.isRunningTests else { return }
         ClipboardHistoryController.shared.startMonitoring()
         ClipboardHotkeyManager.shared.register()
+        AppInputSourceController.shared.startMonitoring()
     }
 
     fileprivate static var isRunningTests: Bool {
@@ -79,6 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         guard !SuperCloudysApp.isRunningTests else { return }
+        AppInputSourceController.shared.stopMonitoring()
         ClipboardHistoryController.shared.flush()
     }
 }

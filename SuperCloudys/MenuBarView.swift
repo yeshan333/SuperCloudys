@@ -46,6 +46,10 @@ struct MenuBarView: View {
 
         Divider()
 
+        AppInputSourceMenu()
+
+        Divider()
+
         Section("剪贴板历史") {
             Button("打开剪贴板历史") {
                 ClipboardPanelController.shared.show()
