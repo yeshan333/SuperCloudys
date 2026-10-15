@@ -1,79 +1,25 @@
-# CLAUDE.md
+# 仓库开发约定
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+SuperCloudys 是 macOS 14+ 菜单栏工具，使用 Swift 5.9、SwiftUI 和 AppKit。界面文字和注释使用简体中文。
 
-## Project Overview
+## 开始修改前
 
-SuperCloudys (formerly RMenu) is a macOS desktop productivity app: Finder right-click menu enhancement + optional Dock global shortcuts (Cmd+1~0) + clipboard history (Ctrl+H) + menu bar management. Requires macOS 14.0+, Swift 5.9, Xcode 15+.
+- 用户功能和默认行为以 [README](README.md) 为入口。
+- 构建、安装、测试和发布命令见[开发说明](docs/development.md)。先运行 `xcodegen generate`，项目配置只改 `project.yml`。
+- 查看[易回归问题](docs/BUG_FIX_RECORDS.md)；修改功能后同步对应文档，不把计划中的功能写成已实现。
 
-## Build & Run
+## 架构
 
-```bash
-# Generate Xcode project (required before any build)
-brew install xcodegen   # one-time
-xcodegen generate
+`project.yml` 定义三个目标：非沙盒主应用 `SuperCloudys`、沙盒 Finder 扩展 `SuperCloudysExtension`、测试宿主目标 `SuperCloudysTests`。`Shared/` 编译进主应用和扩展。
 
-# One-click local build with stable code signing (recommended for dev)
-./scripts/install-local.sh
+主应用入口是 `SuperCloudys/SuperCloudysApp.swift`，管理菜单栏、生命周期和 URL 事件。功能分别位于 `Dock/`、`InputSource/`、`BrowserRouting/`、`Clipboard/`；通用服务位于 `Services/`，菜单组件位于 `MenuBar/`。
 
-# Manual Release build
-xcodebuild \
-  -project SuperCloudys.xcodeproj \
-  -scheme SuperCloudys \
-  -configuration Release \
-  build \
-  CODE_SIGN_IDENTITY="SuperCloudys Local Dev" \
-  CODE_SIGNING_REQUIRED=YES CODE_SIGNING_ALLOWED=YES \
-  CONFIGURATION_BUILD_DIR="$(pwd)/build"
-```
+## 修改时保留的约束
 
-## Tests
-
-```bash
-xcodegen generate
-xcodebuild test \
-  -project SuperCloudys.xcodeproj \
-  -scheme SuperCloudysTests \
-  -destination 'platform=macOS'
-```
-
-Test fixtures live in `SuperCloudysTests/Fixtures/`. The app entry point skips clipboard monitoring during tests via `XCTestConfigurationFilePath` env check.
-
-## Architecture
-
-The project has **three targets** defined in `project.yml` (XcodeGen):
-
-### SuperCloudys (main app, unsandboxed)
-Menu bar-only app (`MenuBarExtra`) — no main window. Subsystems:
-- **Dock/** — Global Cmd+1~0 shortcuts via Carbon `RegisterEventHotKey`. `DockMonitor` watches the Dock plist via `DispatchSourceFileSystemObject` (not polling). `DockAppLauncher` handles activate/hide toggle with AXUIElement window cycling. `AccessibilityActivator` bypasses macOS 14+ focus protection.
-- **Clipboard/** — Clipboard history with Ctrl+H floating panel. `ClipboardMonitorService` polls `NSPasteboard` on a background GCD timer. `ClipboardStore` persists entries to disk (JSON + images). `ClipboardPanelController` manages the NSPanel. Views are in `Clipboard/Views/`.
-- **Services/** — `AppIconCache` (async icon loading), `ExtensionStatus` (on-demand Finder extension state), `LoginItemManager` (`SMAppService`).
-- **MenuBar/** — SwiftUI views for the menu bar dropdown.
-
-### SuperCloudysExtension (Finder Sync extension, sandboxed)
-`FIFinderSync` subclass injecting right-click menu items. Uses an expiring `MenuSnapshot`: a utility queue resolves apps by Bundle ID and pre-builds icons, while `menu(for:)` only assembles `NSMenu`. Actions in `Actions/`.
-
-### Shared/ (compiled into both targets)
-`Constants.swift` (bundle IDs, built-in `ExternalApp` list), `CustomAppStore.swift` (JSON persistence with mtime cache + NSLock), `DockShortcutSettings.swift`.
-
-## Key Design Decisions
-
-- **No sandbox on main app** — required for Accessibility API (AXUIElement) to manipulate other apps' windows.
-- **Stable code signing** — `install-local.sh` creates a persistent self-signed cert so TCC (Accessibility) permissions survive rebuilds. Ad-hoc signing resets TCC every build.
-- **Event-driven Dock monitoring** — `DispatchSourceFileSystemObject` on the Dock plist, not polling. Zero CPU when Dock is unchanged.
-- **`CustomAppStore` shared config** — JSON file at `~/Library/Application Support/SuperCloudys/custom_apps.json` read by both main app and extension. mtime-based cache invalidation, `NSLock` with file I/O outside the lock.
-- **Carbon hotkeys** — `RegisterEventHotKey` doesn't require Accessibility permission for registration itself; Accessibility is only needed for AXUIElement-based activation.
-
-## CI/CD
-
-GitHub Actions (`.github/workflows/build.yml`): push a `v*` tag to run tests, inject version/build numbers, sign with Developer ID, notarize the DMG, and create a GitHub Release. Required credential names are documented in README.
-
-## Scripts
-
-- `scripts/install-local.sh` — full dev cycle: cert setup → Release build → kill running → install to ~/Applications → launch
-- `scripts/create-dmg.sh` — package .app into .dmg
-- `scripts/diagnose_rightclick.sh` — diagnose Finder right-click slowness (samples Finder, checks os_log, inspects spindump)
-
-## Language
-
-UI strings and comments are in Chinese (Simplified). Follow this convention.
+- Finder 扩展在后台刷新菜单快照，菜单回调不做文件或应用解析 I/O。打开文件通过 URL 事件交给主应用执行。
+- Dock 配置通过文件系统事件监听；应用输入法通过前台应用事件切换，避免增加轮询。
+- 浏览器分流依赖系统默认 HTTP/HTTPS 处理应用注册。规则预览与系统注册分开；目标和兜底浏览器始终排除 SuperCloudys，防止循环。
+- 剪贴板采集、图片处理和搜索在后台执行。持久化与恢复约束见[剪贴板实现说明](docs/clipboard-history-design.md)。
+- 自定义应用配置位于 `~/Library/Application Support/SuperCloudys/custom_apps.json`，由主应用和扩展共享。
+- 本地安装使用稳定签名身份；公开发布使用 Developer ID。不要把本地自签证书用于分发。
+- 测试宿主跳过常驻监听和快捷键注册。会改变真实系统输入法或显示浮层的检查需显式启用，见开发说明。

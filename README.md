@@ -1,183 +1,106 @@
 # SuperCloudys
 
-原生 macOS 桌面增效工具：Finder 右键菜单、Dock 全局快捷键、应用默认输入法、剪贴板历史和菜单栏管理。
-
-## 功能
-
-### Finder 右键菜单
-
-- 通过 VSCode、Zed、Warp、Kaku 或自定义 `.app` 打开所选文件/目录
-- 按 Bundle ID 定位已安装应用，支持 `/Applications` 之外的安装位置
-- 复制一个或多个所选项目的完整路径
-- 自定义应用变更会由 Finder 扩展后台刷新
-
-### Dock 全局快捷键
-
-- 默认关闭，可在菜单栏按需开启
-- `Cmd+1` ~ `Cmd+9`、`Cmd+0` 对应 Dock 前 10 个应用
-- 未运行时启动，后台时聚焦，前台时轮换窗口，轮换完成后隐藏
-- 使用文件系统事件自动跟随 Dock 变化，无后台轮询
-- 菜单栏会直接显示快捷键注册冲突
-
-### 应用默认输入法
-
-- 在菜单栏“应用默认输入法 → 添加应用…”选择 `.app` 和默认输入法，再开启“启用自动切换”
-- 每次应用进入前台时切换到配置的输入法；未配置的应用保持当前输入法
-- 切换应用或手动切换输入法后，鼠标指针旁显示 28×28 的当前输入法图标，约 0.8 秒后消失；不抢焦点、不拦截点击，可单独关闭
-- 提示支持按输入法模式保存底色和图标颜色；彩色图标保留原色，单色图标使用配置的前景色
-- 应用配置行、输入法选项和添加应用时的下拉框显示输入法图标，并沿用提示的配色
-- 在同一应用中手动切换输入法后，下次重新进入该应用才恢复默认输入法
-- 支持修改和移除配置，重启后保留配置和启用状态；按 Bundle ID 匹配应用
-- 只列出系统已启用、可选择的键盘输入源，分别保存输入法模式；输入法不可用或切换失败时在菜单中提示
-- 使用系统输入源 API，不需要辅助功能权限
-
-### 剪贴板历史
-
-- `Ctrl+H` 打开跟随鼠标位置的历史面板
-- 支持文本、URL、文件组、图片和颜色
-- 搜索、类型过滤、固定、删除、复制和粘贴到先前应用
-- 图片详情显示本地保存路径，可通过详情按钮或右键菜单“复制图片路径”复制；清理对应历史记录时该文件也会删除
-- 可暂停记录，设置 1/7/30/90 天保留期和 100/500/1000/2000/3000/5000/10000 条上限（默认 3000 条）
-- 可按应用排除记录；默认排除常见密码管理器
-- 忽略 transient/concealed 数据，图片与缩略图随历史记录一同清理
-- 单条文本上限 2 MiB，图片上限 5000 万像素/100 MiB，避免异常负载拖垮常驻进程
-
-剪贴板来源应用由检测到变化时的前台应用推断。立即粘贴需要辅助功能权限；未授权时仍可使用“复制”。
-
-### 菜单栏管理
-
-- Finder 扩展、辅助功能、快捷键冲突和开机自启状态
-- 打开/暂停剪贴板历史及隐私设置
-- 查看和修改指定后缀的系统默认打开应用
-- 添加/移除 Finder 右键菜单中的自定义应用
-
-<p align="center">
-  <img src="screenshots/menubar.png" alt="SuperCloudys 设置界面" width="317">
-</p>
-
-## 系统要求
-
-- macOS 14.0 Sonoma 或更高版本
-- Xcode 15+ 与 XcodeGen（从源码构建）
+macOS 菜单栏工具：Finder 右键打开、Dock 快捷键、应用默认输入法、浏览器分流和剪贴板历史。需要 macOS 14 或更高版本。
 
 ## 安装
 
-### Release
+从 [Releases](https://github.com/yeshan333/SuperCloudys/releases) 下载 DMG，将 `SuperCloudys.app` 拖入“应用程序”并启动。
 
-从 [Releases](../../releases) 下载已签名并公证的 DMG，将 `SuperCloudys.app` 拖入 `/Applications`。
+按需完成设置：
 
-首次安装后：
+- **Finder 右键菜单**：在系统设置的“登录项与扩展”中启用 SuperCloudys Finder 扩展。
+- **窗口轮换、直接粘贴**：在菜单栏点击“授予辅助功能权限…”。普通复制和启动应用不需要这项权限。
+- **浏览器分流**：按下方步骤启用，需要将 SuperCloudys 设为系统默认浏览器。
 
-1. 在“系统设置 → 登录项与扩展 → 添加的扩展”启用 Finder 扩展。
-2. 如需窗口轮换和立即粘贴，在菜单栏点击“授予辅助功能权限…”。
+从源码构建和替换本地安装见[开发说明](docs/development.md)。
 
-### 本地开发
+## 浏览器分流
 
-```bash
-brew install xcodegen
-xcodegen generate
-./scripts/install-local.sh
-```
+**系统默认浏览器必须设为 SuperCloudys，分流才能接收到 VS Code、Zed 等应用交给系统打开的链接。** SuperCloudys 负责转发，网页仍由 Chrome、Firefox 等浏览器显示。
 
-`install-local.sh` 使用长期自签证书安装到 `~/Applications`，因此本地重建不会反复丢失 TCC 权限。该证书仅用于本机开发，公开 Release 使用 Developer ID。
+1. 打开菜单栏 →“浏览器分流…”。
+2. 检查兜底浏览器和规则。初始配置是：
+   - `gitlab.lingxigames-inc.com` 的所有路径 → Firefox Developer Edition，不含子域名。
+   - 其他链接 → Google Chrome。
+3. 点击“启用系统链接分流”，按 macOS 提示确认，看到“系统链接分流已启用”后再测试。
 
-手动测试：
+Chrome 是**兜底浏览器**，SuperCloudys 是**系统链接入口**；应用内的目标浏览器列表不会包含 SuperCloudys。规则预览只检查匹配结果，不会打开网页，也不能证明系统链接分流已启用。
 
-```bash
-xcodegen generate
-xcodebuild test \
-  -project SuperCloudys.xcodeproj \
-  -scheme SuperCloudysTests \
-  -destination "platform=macOS,arch=$(uname -m)"
-```
+<img src="screenshots/browser-routing.jpg" alt="浏览器分流：系统分流已启用，Chrome 兜底，GitLab 使用 Firefox Developer Edition" width="780">
 
-输入法测试默认不改变系统输入法。若需验证真实切换，可单独运行以下集成检查；检查结束后会恢复原输入法：
+### 规则怎么匹配
 
-```bash
-TEST_RUNNER_SUPERCLOUDYS_INPUT_SOURCE_SMOKE=1 xcodebuild test \
-  -project SuperCloudys.xcodeproj \
-  -scheme SuperCloudysTests \
-  -destination "platform=macOS,arch=$(uname -m)" \
-  -only-testing:SuperCloudysTests/AppInputSourceControllerTests/testSystemSelectionChangesCurrentInputSourceAndRestoresOriginal
-```
+按列表顺序使用第一条启用且匹配的规则，可编辑、停用或调整顺序。配置自动保存。
 
-提示浮层的原生检查需设置 `TEST_RUNNER_SUPERCLOUDYS_INDICATOR_SMOKE=1`，并使用 `-only-testing:SuperCloudysTests/InputSourceIndicatorTests`；检查浮层显示、焦点保持、点击穿透和自动消失，预览图片输出到 `/tmp/SuperCloudys-input-source-indicator.png`。
+| 类型 | 示例 | 匹配范围 |
+| --- | --- | --- |
+| 域名 | `gitlab.lingxigames-inc.com` | 该域名下所有路径；可选包含子域名 |
+| 路径前缀 | `/projects/` | 以此开头的路径；可额外限定域名 |
+| URL 正则 | `^https://example\.com/repo/\d+` | 完整 URL，包括查询参数和片段 |
 
-## 使用
+域名不区分大小写。路径前缀区分大小写，按 URL 编码后的路径匹配，不包含查询参数和片段；`/docs` 也会匹配 `/docs-old`，目录匹配可用 `/docs/`。正则默认区分大小写，可用 `(?i)` 忽略大小写；无效正则不能保存，计算超时视为不匹配。
 
-### Finder
+<details>
+<summary>查看规则编辑器</summary>
 
-选中文件或目录后打开右键菜单，选择“通过 … 打开”或“复制路径”。若菜单未出现，先确认 Finder 扩展已启用，再在菜单栏点击“刷新状态”。
+<img src="screenshots/browser-rule-editor.jpg" alt="域名规则编辑器：GitLab 域名匹配所有路径，目标为 Firefox Developer Edition" width="520">
+
+</details>
+
+目标浏览器不可用或打开失败时，依次尝试兜底浏览器、Safari 和其他可用浏览器。暂停规则后，所有收到的链接都交给兜底浏览器。要完全停止分流，在“系统设置 → 桌面与程序坞 → 默认网页浏览器”中改回 Chrome 等浏览器。
+
+分流只处理交给系统默认浏览器的 HTTP/HTTPS 链接。浏览器内部跳转、应用内置网页或明确指定浏览器打开的链接不经过这里。
+
+设为系统默认浏览器时，macOS 也可能把 HTML 文件交给 SuperCloudys。收到的本地 `.html`、`.htm`、`.xhtml` 文件直接用兜底浏览器打开，不匹配网页规则。
+
+## 其他功能
+
+### Finder 右键菜单
+
+选中文件或目录，右键选择通过 VS Code、Zed、Warp、Kaku 打开，或复制完整路径。可在菜单栏添加自定义 `.app`。菜单未出现时，检查扩展是否启用，再点击“刷新状态”。
 
 ### Dock 快捷键
 
-- 第一次按快捷键：启动或聚焦对应应用
-- 应用已在前台：依次轮换窗口，最后一次隐藏应用
-- 未授予辅助功能权限：启动/聚焦仍可用，窗口轮换会降级为隐藏
+`Cmd+1`～`Cmd+9`、`Cmd+0` 对应 Dock 前 10 个固定应用，**默认开启**，可在“Dock 快捷键”菜单关闭。快捷键会启动或聚焦应用；应用已在前台时轮换窗口，最后隐藏。未授予辅助功能权限时，前台操作降级为隐藏。注册冲突会显示在菜单栏。
 
-### 剪贴板面板
+### 应用默认输入法
 
-- `↑` / `↓`：移动选择
-- `Return`：复制选中条目
-- `Cmd+Return`：粘贴到打开面板前的应用
-- `Cmd+C`：复制选中条目
-- `Cmd+.`：固定/取消固定
-- `Cmd+Delete`：删除选中条目
-- `Tab` / `Shift+Tab`：切换类型过滤
-- `Esc`：关闭
+在“应用默认输入法 → 添加应用…”选择应用和输入法，再开启“启用自动切换”（默认关闭）。应用进入前台时应用规则，未配置的应用保持当前输入法。在同一应用里手动切换后，直到下次进入该应用才恢复规则。
 
-历史元数据位于 `~/Library/Application Support/SuperCloudys/clipboard_history.json`，图片位于同目录的 `ClipboardAssets`；文件仅对当前用户开放。
+鼠标旁的输入法提示约 0.8 秒后消失，可单独关闭。输入法切换不需要辅助功能权限。
 
-历史损坏时，原始 JSON 和图片会一起保存在同目录的 `clipboard_recovery_*` 私有恢复目录中，不随常规历史清理删除。无法完成备份时会暂停保存，保护原文件。
+### 剪贴板历史
 
-## 架构
+`Ctrl+H` 在鼠标附近打开或关闭历史面板，支持文本、URL、文件组、图片和颜色，可搜索、按类型筛选和固定条目。
 
-- `SuperCloudys/`：菜单栏主应用、Dock 快捷键、应用默认输入法、剪贴板历史
-- `SuperCloudysExtension/`：沙盒化 Finder Sync 扩展
-- `Shared/`：主应用和扩展共享的模型及自定义应用配置
-- `project.yml`：XcodeGen 项目配置
+<img src="screenshots/clipboard-history.jpg" alt="剪贴板历史示例：固定条目、链接、颜色和文本详情" width="800">
 
-关键实现：
+图中剪贴板内容为示例；截图来自当前源码的界面预览，见[截图说明](screenshots/README.md)。
 
-- Carbon `RegisterEventHotKey` 注册全局快捷键
-- `NSWorkspace` 前台应用事件 + Carbon `TISSelectInputSource` 切换应用默认输入法，无后台轮询
-- `DispatchSourceFileSystemObject` 监听 Dock plist
-- `.utility` GCD timer 监听 `NSPasteboard.changeCount`
-- 图片在剪贴板后台队列完成压缩和原子落盘后才发布到 UI
-- Finder 菜单使用文件事件驱动的后台快照，主线程只组装 `NSMenu`
-- JSON + 内存过滤存储历史，默认保留 3000 条；未引入数据库或第三方运行时依赖
-- ASCII 全文搜索使用 Foundation 快速匹配；非 ASCII 内容沿用 Swift Unicode 匹配规则，性能仍取决于正文大小。搜索支持取消过期查询，仅在面板可见时筛选，历史变化后才重新排序
-- 文本去重核对实际内容，图片使用 SHA-256；旧图片弱指纹不会作为删除重复图片的依据
-- 图片预览在后台串行降采样，最长边 1024 像素，缓存按解码字节设置 32 MiB 预算；原图保留用于复制和粘贴
+| 操作 | 快捷键 |
+| --- | --- |
+| 移动选择 | `↑` / `↓` |
+| 复制条目 | `Return` / `Cmd+C` |
+| 粘贴到打开面板前的应用 | `Cmd+Return`，或双击条目 |
+| 固定 / 取消固定 | `Cmd+.` |
+| 删除条目 | `Cmd+Delete` |
+| 切换类型 | `Tab` / `Shift+Tab` |
+| 关闭面板 | `Esc` |
 
-搜索性能对照脚本位于 `scripts/benchmark-clipboard-search.swift`，编译运行命令见文件头；使用合成数据，不访问真实剪贴板或历史。
+默认保留最多 **3000 条未固定记录**，不按时间过期；固定条目不受条数和保留期限制。菜单中可暂停记录、调整上限和保留期、排除指定应用；默认排除常见密码管理器。来源应用是采样时的前台应用推断结果。
 
-## 发布
+图片详情支持复制本地图片路径，删除对应记录后图片也会清理。历史数据保存在 `~/Library/Application Support/SuperCloudys/`；存储和损坏恢复机制见[剪贴板实现说明](docs/clipboard-history-design.md)。
 
-推送 `v*` tag 会运行测试、Developer ID 签名、DMG 公证和 GitHub Release。仓库需配置：
+### 菜单栏管理
 
-- `DEVELOPER_ID_CERTIFICATE_BASE64`
-- `DEVELOPER_ID_CERTIFICATE_PASSWORD`
-- `DEVELOPER_ID_APPLICATION`
-- `KEYCHAIN_PASSWORD`
-- `APPLE_ID`
-- `APPLE_TEAM_ID`
-- `APPLE_APP_SPECIFIC_PASSWORD`
+可查看扩展和辅助功能权限状态、设置开机自启，以及查看或修改文件后缀的默认打开应用。
 
-版本由 tag 注入 `MARKETING_VERSION`，构建号使用 GitHub Actions run number。
+## 开发与维护
 
-```bash
-git tag v2.1.0
-git push origin v2.1.0
-```
-
-## Finder 右键卡顿排查
-
-```bash
-./scripts/diagnose_rightclick.sh
-```
-
-Finder 会等待所有已启用的 Finder Sync 扩展返回菜单；卡顿不一定来自 SuperCloudys。诊断脚本会采样 Finder、检查扩展日志并读取 spindump。
+- [构建、测试、发布和排查](docs/development.md)
+- [剪贴板实现说明](docs/clipboard-history-design.md)
+- [易回归问题](docs/BUG_FIX_RECORDS.md)
+- [更新记录](CHANGELOG.md)
 
 ## License
 

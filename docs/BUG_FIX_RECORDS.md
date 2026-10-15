@@ -1,32 +1,39 @@
-# BUG FIX RECORDS
+# 易回归问题
 
-This document tracks edge-case bugs, UI/UX issues, and their resolutions to avoid reintroducing them in future developments.
+维护相关代码时，保留以下行为。本文记录实现约束，真实系统交互仍需按场景复测。
 
-## 1. macOS 14+ Background App Activation Restriction
-**Issue:** `Cmd + Number` to quickly activate/open Dock application windows failed silently.
-**Root Cause:** Starting with macOS 14 (Sonoma), background apps (e.g. `LSUIElement` apps like SuperCloudys) are restricted from bringing other apps to the foreground via `NSRunningApplication.activate()`. The operation is intercepted by system policy and silently fails.
-**Fix:** Replaced `running.activate()` with `NSWorkspace.shared.openApplication(at:configuration:completionHandler:)`. By setting `config.activates = true`, the system's `launchservicesd` safely brings the application to the foreground without triggering background activation policy violations.
-**Code Reference:** `DockAppLauncher.swift` (`launchOrFocus` method)
+## Dock 应用无法切到前台
 
-## 2. Clipboard History List Selection Jumping (Arrow Keys)
-**Issue:** Using `Up/Down` arrow keys to navigate the clipboard history caused the selection to randomly jump several items or skip sections.
-**Root Cause:** The `EntryListView` visually grouped items by `createdAt` or `Pinned` status, but the `onKeyPress` navigation used the flat `filteredEntries` array, which was only partially sorted (or sorted primarily by insertion order instead of visual groupings). The discrepancy between the flat array index and the visual grouped index caused the jump.
-**Fix:** 
-- Enforced a strict visual-matching sort order in `ClipboardHistoryController.refreshFiltered()` (Pinned items first, then by `lastUsedAt ?? createdAt` descending).
-- Updated `EntryListView.groupedByDay()` to explicitly group pinned items into a `"Pinned"` section, and use `lastUsedAt ?? createdAt` for the remaining items.
-This guarantees the visual order and the array order are 100% identical.
+后台菜单栏应用只调用 `NSRunningApplication.activate()` 曾出现无法聚焦的情况。当前通过 `NSWorkspace.openApplication` 并设置 `activates = true` 打开或聚焦应用，窗口操作配合辅助功能 API。
 
-## 3. Search Bar Auto-Focus Failure on Re-open
-**Issue:** Pressing `Ctrl + H` opened the clipboard history popup, but the search `TextField` did not receive cursor focus automatically after the first time.
-**Root Cause:** In SwiftUI macOS development, `.onAppear` only fires when the view is initially created. Since `ClipboardPanelController` uses `orderOut` to hide the panel and `makeKeyAndOrderFront` to show it, the underlying `NSHostingView` is never destroyed, so `.onAppear` is skipped on subsequent opens.
-**Fix:** Added an `@Published var isPanelVisible` state to `ClipboardHistoryController` that toggles on `show()` and `hide()`. The `SearchBarView` observes this via `.onChange(of: isVisible)` to re-apply focus.
+相关代码：[DockAppLauncher.swift](../SuperCloudys/Dock/DockAppLauncher.swift)。复测未启动、后台、前台多窗口三种情况。
 
-## 4. Search Bar Focus Timing Issue (Window Not Key Yet)
-**Issue:** Even with `.onAppear` and `.onChange(of: isVisible)`, the text field sometimes failed to gain focus when the popup was opened.
-**Root Cause:** SwiftUI's `@FocusState` requires the hosting window to be the active Key Window. When `makeKeyAndOrderFront` is called, the window might still be animating or transitioning. Setting the focus state instantly gets ignored by the system.
-**Fix:** Wrapped the `isSearchFocused = true` assignment in `DispatchQueue.main.asyncAfter(deadline: .now() + 0.1)` inside both `.onAppear` and `.onChange`. The 0.1s delay ensures the window is ready to accept keyboard focus.
+## 剪贴板方向键跳过条目
 
-## 5. Accessibility Permission Had No Visible Recovery Path
-**Issue:** Window cycling and direct clipboard paste could fail without explaining that Accessibility permission was missing.
-**Root Cause:** SuperCloudys is an `LSUIElement` app with no main window, while permission prompting happened independently of the feature the user was trying to use.
-**Fix:** The menu now shows live Accessibility state and a user-initiated permission/settings action. Direct paste stays disabled until permission is present; ordinary copy and app launching continue to work without it.
+列表分组和方向键使用不同顺序会造成跳选。排序统一为固定优先、`lastUsedAt ?? createdAt` 倒序，日期分组也使用同一时间字段。
+
+相关代码：[ClipboardSearch.swift](../SuperCloudys/Clipboard/ClipboardSearch.swift)、[EntryListView.swift](../SuperCloudys/Clipboard/Views/EntryListView.swift)。复测固定条目、跨日期条目，以及使用旧条目后的排序。
+
+## 再次打开面板时搜索框没有焦点
+
+面板隐藏后不会销毁视图，首次出现回调不足以处理再次打开。搜索框同时观察可见状态，并延迟 0.1 秒请求焦点，为窗口切换留出时间。
+
+相关代码：[SearchBarView.swift](../SuperCloudys/Clipboard/Views/SearchBarView.swift)。连续开关面板后直接输入，确认无需点击搜索框。
+
+## 辅助功能未授权时操作无反馈
+
+菜单栏显示权限状态和授权入口。未授权时禁用直接粘贴，保留普通复制和启动应用；Dock 前台窗口轮换降级为隐藏。
+
+相关代码：[MenuBarView.swift](../SuperCloudys/MenuBarView.swift)、[ClipboardHistoryController.swift](../SuperCloudys/Clipboard/ClipboardHistoryController.swift)。授权变更后检查菜单状态及可用操作。
+
+## 浏览器预览命中，编辑器链接仍走原浏览器
+
+规则预览只验证匹配。只有系统将 HTTP/HTTPS 交给 SuperCloudys，才能执行转发；启用步骤见 [README](../README.md#浏览器分流)。目标浏览器列表必须排除 SuperCloudys，避免循环打开。
+
+相关代码：[BrowserRoutingController.swift](../SuperCloudys/BrowserRouting/BrowserRoutingController.swift)。真实验证要从编辑器点击链接，分别检查规则目标和兜底浏览器，不能只看预览结果。
+
+## 设为默认浏览器后 HTML 文件打不开
+
+系统可能同时把 `public.html` 文件关联改为 SuperCloudys。只接收网页 URL 事件会漏掉 Finder 的文件打开事件。
+
+应用委托现在接收文件 URL；本地 `.html`、`.htm`、`.xhtml` 使用兜底浏览器，保持原 URL，不参与网页规则匹配。复测 Finder 双击、一次打开多个文件，以及文件名含空格和中文的情况。
