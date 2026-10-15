@@ -22,6 +22,8 @@ final class AppInputSourceController: ObservableObject {
     private var pendingSwitch: Task<Void, Never>?
     private var pendingIndicator: Task<Void, Never>?
     private var isMonitoring = false
+    private var lastActivatedBundleID: String?
+    private var lastObservedInputSource: InputSourceIdentifier?
 
     init(
         settings: InputSourceSettings = InputSourceSettings(),
@@ -37,6 +39,7 @@ final class AppInputSourceController: ObservableObject {
         self.showsIndicator = settings.showsIndicator
         self.rules = settings.rules
         refreshSources()
+        lastObservedInputSource = self.service.currentSourceID()
     }
 
     func startMonitoring() {
@@ -47,7 +50,7 @@ final class AppInputSourceController: ObservableObject {
         ) { [weak self] notification in
             let bundleID = (notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?
                 .bundleIdentifier
-            MainActor.assumeIsolated { self?.scheduleSwitch(for: bundleID) }
+            MainActor.assumeIsolated { self?.applicationDidActivate(bundleID: bundleID) }
         }
         sourcesObserver = DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name(kTISNotifyEnabledKeyboardInputSourcesChanged as String),
@@ -61,11 +64,13 @@ final class AppInputSourceController: ObservableObject {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.inputSourceDidChange() }
         }
-        scheduleSwitch(for: frontmostBundleID())
+        lastObservedInputSource = service.currentSourceID()
+        applicationDidActivate(bundleID: frontmostBundleID())
     }
 
     func stopMonitoring() {
         isMonitoring = false
+        lastActivatedBundleID = nil
         pendingSwitch?.cancel()
         pendingSwitch = nil
         pendingIndicator?.cancel()
@@ -127,6 +132,13 @@ final class AppInputSourceController: ObservableObject {
         sources = service.availableSources()
     }
 
+    /// 同一应用内的重复激活不算重新进入，保留用户手动选择的输入法。
+    func applicationDidActivate(bundleID: String?) {
+        guard bundleID != lastActivatedBundleID else { return }
+        lastActivatedBundleID = bundleID
+        scheduleSwitch(for: bundleID)
+    }
+
     /// 等待前台切换完成；快速切换应用时取消上一条待执行操作。
     func scheduleSwitch(for bundleID: String?) {
         pendingSwitch?.cancel()
@@ -161,6 +173,7 @@ final class AppInputSourceController: ObservableObject {
         }
         guard service.currentSourceID() != rule.inputSource else { return }
         let status = service.select(rule.inputSource)
+        lastObservedInputSource = service.currentSourceID()
         if status != 0 {
             lastError = "无法切换 \(rule.appName) 的输入法：\(NSError(domain: NSOSStatusErrorDomain, code: Int(status)).localizedDescription)"
         }
@@ -168,6 +181,9 @@ final class AppInputSourceController: ObservableObject {
 
     /// 手动切换输入法时只更新提示，不重新应用默认输入法。
     func inputSourceDidChange() {
+        let current = service.currentSourceID()
+        guard current != lastObservedInputSource else { return }
+        lastObservedInputSource = current
         guard pendingSwitch == nil else { return }
         scheduleIndicator(for: frontmostBundleID())
     }
@@ -193,6 +209,7 @@ final class AppInputSourceController: ObservableObject {
             indicator?.hide()
             return
         }
+        lastObservedInputSource = current
         let app = NSWorkspace.shared.frontmostApplication
         let rule = rules.first(where: { $0.bundleID == bundleID })
         let name = app?.bundleIdentifier == bundleID ? app?.localizedName : nil

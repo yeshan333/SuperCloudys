@@ -170,6 +170,104 @@ final class AppInputSourceControllerTests: XCTestCase {
     }
 
     @MainActor
+    func testRepeatedActivationWithinSameAppPreservesManualInputSourceAndDoesNotRepeatPrompt() async throws {
+        let fixture = Fixture()
+        defer { fixture.cleanUp() }
+        let entered = expectation(description: "首次进入应用显示默认输入法")
+        fixture.indicator.onShow = { entered.fulfill() }
+        fixture.controller.applicationDidActivate(bundleID: "test.editor")
+        await fulfillment(of: [entered], timeout: 2)
+        fixture.service.current = fixture.service.chinese.id
+        let changed = expectation(description: "手动切换后显示中文输入法")
+        fixture.indicator.onShow = { changed.fulfill() }
+        fixture.controller.inputSourceDidChange()
+        await fulfillment(of: [changed], timeout: 2)
+        fixture.indicator.onShow = nil
+        fixture.indicator.contents = []
+
+        fixture.controller.applicationDidActivate(bundleID: "test.editor")
+        XCTAssertTrue(fixture.indicator.isVisible, "重复激活不应隐藏已有提示")
+        fixture.controller.inputSourceDidChange()
+        try await Task.sleep(for: .milliseconds(350))
+
+        XCTAssertEqual(fixture.service.current, fixture.service.chinese.id)
+        XCTAssertEqual(fixture.service.selections, [fixture.service.english.id])
+        XCTAssertTrue(fixture.indicator.contents.isEmpty)
+    }
+
+    @MainActor
+    func testReturningFromAnotherAppRestoresDefaultEvenAfterDuplicateActivation() async {
+        let fixture = Fixture()
+        defer { fixture.cleanUp() }
+        let entered = expectation(description: "首次进入编辑器")
+        fixture.indicator.onShow = { entered.fulfill() }
+        fixture.controller.applicationDidActivate(bundleID: "test.editor")
+        await fulfillment(of: [entered], timeout: 2)
+        fixture.indicator.onShow = nil
+        fixture.service.current = fixture.service.chinese.id
+        fixture.controller.applicationDidActivate(bundleID: "test.editor")
+        fixture.frontmost = "test.browser"
+        fixture.controller.applicationDidActivate(bundleID: "test.browser")
+        fixture.frontmost = "test.editor"
+        let returned = expectation(description: "重新进入编辑器恢复默认输入法")
+        fixture.indicator.onShow = { returned.fulfill() }
+        fixture.controller.applicationDidActivate(bundleID: "test.editor")
+        await fulfillment(of: [returned], timeout: 2)
+        XCTAssertEqual(fixture.service.selections, [fixture.service.english.id, fixture.service.english.id])
+        XCTAssertEqual(fixture.indicator.contents.last?.source, fixture.service.english)
+    }
+
+    @MainActor
+    func testInputSourceNotificationWithoutActualChangeDoesNotShowPrompt() async throws {
+        let fixture = Fixture()
+        defer { fixture.cleanUp() }
+        fixture.controller.inputSourceDidChange()
+        fixture.controller.inputSourceDidChange()
+        try await Task.sleep(for: .milliseconds(250))
+        XCTAssertTrue(fixture.indicator.contents.isEmpty)
+        XCTAssertTrue(fixture.service.selections.isEmpty)
+    }
+
+    @MainActor
+    func testChangingModeWithinSameInputSourceShowsNewModeOnce() async throws {
+        let fixture = Fixture()
+        defer { fixture.cleanUp() }
+        _ = fixture.controller
+        let traditional = KeyboardInputSource(
+            id: InputSourceIdentifier(sourceID: "test.chinese", modeID: "traditional"), name: "繁体"
+        )
+        fixture.service.sources.append(traditional)
+        fixture.service.current = traditional.id
+        let changed = expectation(description: "同一输入法切换模式后显示新模式")
+        fixture.indicator.onShow = { changed.fulfill() }
+        fixture.controller.inputSourceDidChange()
+        await fulfillment(of: [changed], timeout: 2)
+        fixture.indicator.onShow = nil
+        fixture.controller.inputSourceDidChange()
+        try await Task.sleep(for: .milliseconds(250))
+        XCTAssertEqual(fixture.indicator.contents.map(\.source), [traditional])
+        XCTAssertTrue(fixture.service.selections.isEmpty)
+    }
+
+    @MainActor
+    func testUpdatingCurrentAppRuleAppliesNewDefaultDespiteUnchangedApp() async {
+        let fixture = Fixture()
+        defer { fixture.cleanUp() }
+        let entered = expectation(description: "进入编辑器应用旧默认输入法")
+        fixture.indicator.onShow = { entered.fulfill() }
+        fixture.controller.applicationDidActivate(bundleID: "test.editor")
+        await fulfillment(of: [entered], timeout: 2)
+        let updated = expectation(description: "修改当前应用规则后立即使用新默认输入法")
+        fixture.indicator.onShow = { updated.fulfill() }
+        fixture.controller.setRule(
+            bundleID: "test.editor", appName: "Editor", appPath: "/Applications/Editor.app",
+            source: fixture.service.chinese
+        )
+        await fulfillment(of: [updated], timeout: 2)
+        XCTAssertEqual(fixture.service.selections, [fixture.service.english.id, fixture.service.chinese.id])
+    }
+
+    @MainActor
     func testDelayedSwitchDoesNotAffectAppThatIsNoLongerFrontmost() async throws {
         let fixture = Fixture()
         defer { fixture.cleanUp() }
