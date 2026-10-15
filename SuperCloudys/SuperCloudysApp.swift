@@ -33,6 +33,7 @@ struct SuperCloudysApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let log = Logger(subsystem: "com.yeshan333.SuperCloudys", category: "OpenApp")
+    var browserRoutingController = BrowserRoutingController.shared
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSAppleEventManager.shared().setEventHandler(
@@ -41,6 +42,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             forEventClass: AEEventClass(kInternetEventClass),
             andEventID: AEEventID(kAEGetURL)
         )
+        // MenuBarExtra 没有文档场景，显式接收 Finder 的文件事件，避免被 SwiftUI 消耗。
+        NSAppleEventManager.shared().setEventHandler(
+            self,
+            andSelector: #selector(handleOpenDocumentsEvent(_:withReplyEvent:)),
+            forEventClass: AEEventClass(kCoreEventClass),
+            andEventID: AEEventID(kAEOpenDocuments)
+        )
     }
 
     @objc private func handleGetURLEvent(
@@ -48,9 +56,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         withReplyEvent replyEvent: NSAppleEventDescriptor
     ) {
         guard let value = event.paramDescriptor(forKeyword: AEKeyword(keyDirectObject))?.stringValue,
-              let url = URL(string: value),
-              url.scheme == AppConstants.urlScheme,
-              url.host == "open" else { return }
+              let url = URL(string: value) else { return }
+        handleIncomingURL(url)
+    }
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls { handleIncomingURL(url) }
+    }
+
+    @objc func handleOpenDocumentsEvent(
+        _ event: NSAppleEventDescriptor,
+        withReplyEvent replyEvent: NSAppleEventDescriptor
+    ) {
+        guard let documents = event.paramDescriptor(forKeyword: AEKeyword(keyDirectObject)),
+              documents.numberOfItems > 0 else { return }
+        for index in 1...documents.numberOfItems {
+            guard let url = documents.atIndex(index)?.fileURLValue else { continue }
+            handleIncomingURL(url)
+        }
+    }
+
+    func handleIncomingURL(_ url: URL) {
+        if BrowserRoutingConfiguration.supports(url) {
+            Task {
+                await browserRoutingController.open(url)
+                if browserRoutingController.lastError != nil {
+                    BrowserRoutingSettingsWindow.shared.show()
+                }
+            }
+            return
+        }
+        guard url.scheme == AppConstants.urlScheme, url.host == "open" else { return }
         Self.log.info("Received open request")
         handleOpenAppRequest(url)
     }

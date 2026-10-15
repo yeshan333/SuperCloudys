@@ -50,6 +50,12 @@ struct MenuBarView: View {
 
         Divider()
 
+        Button("浏览器分流…") {
+            BrowserRoutingSettingsWindow.shared.show()
+        }
+
+        Divider()
+
         Section("剪贴板历史") {
             Button("打开剪贴板历史") {
                 ClipboardPanelController.shared.show()
